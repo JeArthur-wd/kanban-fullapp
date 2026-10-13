@@ -118,6 +118,7 @@ Design decisions (Part 7)
 - Frontend prefixes backend numeric ids for drag-and-drop stability and strips them before API calls.
 - Drag-and-drop uses card/column metadata to resolve drop targets across columns.
 - Playwright runs against the backend-served static build to reflect production behavior.
+- After a drop, card add or card delete, the page re-fetches the board as a background refresh. The full-screen "Loading your board" view is shown only on the initial load (no board yet), so the board is not unmounted and rebuilt after every action. The `isLoading` state was removed.
 
 ## Part 8: AI connectivity (OpenRouter)
 
@@ -152,6 +153,8 @@ Testing notes (added after Part 8)
 	- npm run test:all (runs unit + Playwright). Playwright uses the backend-served app at 8000.
 - Stop the container when done:
 	- ./scripts/stop-mac.sh (or platform equivalent)
+- Docker Desktop must be running first (on Windows, start it before the start script).
+- Builds download npm/pip packages, so a flaky connection can fail `npm ci` (ECONNRESET) or DNS lookups; re-run once the network is stable.
 
 ## Part 9: AI structured outputs for Kanban updates
 
@@ -182,3 +185,19 @@ Tests
 Success criteria
 - Sidebar chat is responsive, clear, and stable.
 - AI-driven Kanban updates reflect immediately in the UI.
+
+## After Part 10: setup, repo and polish
+
+Done
+- [x] `scripts/start-windows.ps1` stops with a clear error if `.env` is missing or `docker build` fails (previously it continued to `docker run`). The Mac and Linux scripts were not changed.
+- [x] Added `.env.example` (`OPENROUTER_API_KEY=`) and a README "Setup" section. `.env` stays gitignored and is required by the start scripts; the app runs with a dummy key but AI chat returns an error.
+- [x] Fixed the full-board flash after drag-and-drop (see Part 7 design decisions).
+
+Decisions
+- The project lives in its own repo, `JeArthur-wd/kanban-fullapp` (`main`). The original remote was renamed `upstream` (ed-donner/pm).
+- The existing GitHub Pages site (jearthur-wd.github.io/kanban) is a separate, frontend-only repo and is left untouched. Pages cannot run the FastAPI backend or SQLite, and the static export is built for `/` rather than `/kanban/`.
+- Commits carry no Co-Authored-By trailer (user preference).
+
+Known follow-ups
+- `handleDragEnd` in `KanbanBoard.tsx` calls `onMoveCard` inside the `setBoard` updater. Updaters should be pure and may run twice in React Strict Mode (dev), sending a duplicate move request. Harmless today because the move is idempotent, but worth moving out of the updater.
+- No unit test covers the "no loading screen on background refresh" behavior.
