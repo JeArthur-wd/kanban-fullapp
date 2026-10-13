@@ -46,10 +46,11 @@ export const KanbanCard = ({ card, columnId, onDelete }: KanbanCardProps) => {
         <button
           type="button"
           onClick={() => onDelete(card.id)}
-          className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-transparent text-base leading-none text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
           aria-label={`Delete ${card.title}`}
+          title="Delete card"
         >
-          Remove
+          &times;
         </button>
       </div>
     </article>
