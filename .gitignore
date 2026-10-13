@@ -175,3 +175,12 @@ cython_debug/
 .DS_Store
 backend/data/
 
+
+# Impeccable working files (keep design.json and surfaces/)
+.impeccable/mocks/
+.impeccable/questions/
+.impeccable/review/
+.impeccable/*.json
+!.impeccable/design.json
+.impeccable/*.md
+.impeccable/*.out

@@ -17,12 +17,14 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { BoardMark, LogOutIcon } from "@/components/icons";
 import { createId, moveCard, type BoardData, type Column } from "@/lib/kanban";
 
 type KanbanBoardProps = {
   board: BoardData;
   onBoardChange: React.Dispatch<React.SetStateAction<BoardData>>;
   onLogout?: () => void;
+  username?: string;
   onRenameColumn?: (columnId: string, title: string) => void;
   onAddCard?: (columnId: string, title: string, details: string) => void;
   onDeleteCard?: (columnId: string, cardId: string) => void;
@@ -34,6 +36,7 @@ export const KanbanBoard = ({
   board,
   onBoardChange,
   onLogout,
+  username,
   onRenameColumn,
   onAddCard,
   onDeleteCard,
@@ -182,93 +185,67 @@ export const KanbanBoard = ({
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
-
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="flex flex-col items-start gap-3">
-              {onLogout ? (
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)]"
-                >
-                  Log out
-                </button>
-              ) : null}
-              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                  Focus
-                </p>
-                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                  One board. Five columns. Zero clutter.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
-          </div>
-        </header>
-
-        <div className={sidebar ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]" : ""}>
-          <DndContext
-            sensors={sensors}
-            measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-            collisionDetection={collisionDetection}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6">
+        <BoardMark />
+        <h1 className="text-[15px] font-semibold tracking-tight text-ink">
+          Kanban Studio
+        </h1>
+        <div className="flex-1" />
+        {username ? (
+          <span className="hidden text-[13px] text-muted sm:inline">{username}</span>
+        ) : null}
+        {onLogout ? (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex h-8 items-center gap-1.5 rounded-md border border-line px-3 text-[13px] font-medium text-ink transition-colors hover:border-line-strong hover:bg-ground"
           >
-            <section className="grid gap-6 lg:grid-cols-5">
-              {board.columns.map((column) => (
-                <KanbanColumn
-                  key={column.id}
-                  column={column}
-                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                  onRename={handleRenameColumn}
-                  onAddCard={handleAddCard}
-                  onDeleteCard={handleDeleteCard}
-                />
-              ))}
-            </section>
-            <DragOverlay>
-              {activeCard ? (
-                <div className="w-[260px]">
-                  <KanbanCardPreview card={activeCard} />
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-          {sidebar ? (
-            <div className="lg:sticky lg:top-10 lg:self-start">
-              {sidebar}
-            </div>
-          ) : null}
-        </div>
+            <LogOutIcon width={14} height={14} />
+            Log out
+          </button>
+        ) : null}
+      </header>
+
+      <main
+        className={
+          sidebar
+            ? "grid flex-1 grid-cols-[minmax(0,1fr)] gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px] 2xl:p-6"
+            : "flex-1 p-4 sm:p-6"
+        }
+      >
+        <DndContext
+          sensors={sensors}
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          collisionDetection={collisionDetection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <section className="relative grid min-w-0 auto-cols-[minmax(16rem,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-5 lg:min-h-[calc(100dvh-6rem)]">
+            {board.columns.map((column, index) => (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                index={index}
+                onRename={handleRenameColumn}
+                onAddCard={handleAddCard}
+                onDeleteCard={handleDeleteCard}
+              />
+            ))}
+          </section>
+          <DragOverlay>
+            {activeCard ? (
+              <div className="w-[272px]">
+                <KanbanCardPreview card={activeCard} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+        {sidebar ? (
+          <div className="lg:sticky lg:top-[4.5rem] lg:self-start">{sidebar}</div>
+        ) : null}
       </main>
     </div>
   );

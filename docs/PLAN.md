@@ -201,11 +201,15 @@ Done
 - [x] Added `.env.example` (`OPENROUTER_API_KEY=`) and a README "Setup" section. `.env` stays gitignored and is required by the start scripts; the app runs with a dummy key but AI chat returns an error.
 - [x] Fixed the full-board flash after drag-and-drop (see Part 7 design decisions).
 
+- [x] Restyled the whole UI to a clean, light "category standard" look (one blue accent, Geist type, muted per-column status dots, drawn SVG icons, slim top bar, thinking state in the chat). Look and feel only; behavior, data and API unchanged. Product and design records are in `PRODUCT.md` and `DESIGN.md`.
+
 Decisions
 - The project lives in its own repo, `JeArthur-wd/kanban-fullapp` (`main`). The original remote was renamed `upstream` (ed-donner/pm).
 - The existing GitHub Pages site (jearthur-wd.github.io/kanban) is a separate, frontend-only repo and is left untouched. Pages cannot run the FastAPI backend or SQLite, and the static export is built for `/` rather than `/kanban/`.
 - Commits carry no Co-Authored-By trailer (user preference).
 
 Known follow-ups
+- Not built (scope was look and feel only, awaiting a decision): highlight of cards the assistant just changed, clickable example prompts in the empty chat, and reworded login copy (currently "explore the MVP").
+- Deployment to a Docker cloud host (Fly.io suggested) is not done yet.
 - `handleDragEnd` in `KanbanBoard.tsx` calls `onMoveCard` inside the `setBoard` updater. Updaters should be pure and may run twice in React Strict Mode (dev), sending a duplicate move request. Harmless today because the move is idempotent, but worth moving out of the updater.
 - No unit test covers the "no loading screen on background refresh" behavior.

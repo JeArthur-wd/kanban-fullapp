@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { BoardMark } from "@/components/icons";
 import {
   fetchBoard,
   createCard,
@@ -22,6 +23,9 @@ import {
 import { findCardLocation, fromCardId, fromColumnId, type BoardData } from "@/lib/kanban";
 
 const CREDENTIALS = { username: "user", password: "password" };
+
+const inputClass =
+  "mt-1.5 h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink transition-colors hover:border-line-strong focus:border-accent";
 
 export default function Home() {
   const [board, setBoard] = useState<BoardData | null>(null);
@@ -212,108 +216,98 @@ export default function Home() {
 
   if (!isAuthenticated) {
     return (
-      <div className="relative min-h-screen overflow-hidden">
-        <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
+      <main className="grid min-h-screen place-items-center px-4 py-12">
+        <section className="w-full max-w-[400px] rounded-xl border border-line bg-surface p-8 shadow-panel">
+          <div className="flex items-center gap-2.5">
+            <BoardMark />
+            <span className="text-[15px] font-semibold tracking-tight text-ink">
+              Kanban Studio
+            </span>
+          </div>
+          <h1 className="mt-8 text-2xl font-semibold tracking-tight text-ink">
+            Welcome back
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-muted">{welcomeCopy}</p>
 
-        <main className="relative mx-auto flex min-h-screen max-w-xl items-center px-6 py-16">
-          <section className="w-full rounded-[32px] border border-[var(--stroke)] bg-white/90 p-8 shadow-[var(--shadow)] backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-              Project Management MVP
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)]">
-              Welcome back
-            </h1>
-            <p className="mt-3 text-sm leading-6 text-[var(--gray-text)]">
-              {welcomeCopy}
-            </p>
-
-            <form onSubmit={handleLogin} className="mt-6 space-y-4">
-              <div>
-                <label
-                  htmlFor="username"
-                  className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]"
-                >
-                  Username
-                </label>
-                <input
-                  id="username"
-                  name="username"
-                  placeholder="user"
-                  aria-label="Username"
-                  className="mt-2 w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
-                  required
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="password"
-                  className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]"
-                >
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  placeholder="password"
-                  aria-label="Password"
-                  className="mt-2 w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
-                  required
-                />
-              </div>
-              {error ? (
-                <p className="text-sm font-semibold text-[var(--secondary-purple)]">
-                  {error}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                className="w-full rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:brightness-110"
-              >
-                Sign in
-              </button>
-              <p className="text-xs text-[var(--gray-text)]">
-                Demo credentials: user / password
+          <form onSubmit={handleLogin} className="mt-6 space-y-4">
+            <div>
+              <label htmlFor="username" className="text-[13px] font-medium text-ink">
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                placeholder="user"
+                aria-label="Username"
+                autoComplete="username"
+                className={inputClass}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="text-[13px] font-medium text-ink">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="password"
+                aria-label="Password"
+                autoComplete="current-password"
+                className={inputClass}
+                required
+              />
+            </div>
+            {error ? (
+              <p role="alert" className="text-[13px] font-medium text-danger">
+                {error}
               </p>
-            </form>
-          </section>
-        </main>
-      </div>
+            ) : null}
+            <button
+              type="submit"
+              className="h-10 w-full rounded-lg bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+            >
+              Sign in
+            </button>
+          </form>
+          <p className="mt-5 rounded-lg bg-ground px-3 py-2.5 text-[13px] text-muted">
+            Demo credentials: user / password
+          </p>
+        </section>
+      </main>
     );
   }
 
   if (!board) {
     return (
-      <div className="relative min-h-screen overflow-hidden">
-        <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-        <main className="relative mx-auto flex min-h-screen max-w-xl items-center px-6 py-16">
-          <section className="w-full rounded-[32px] border border-[var(--stroke)] bg-white/90 p-8 text-center shadow-[var(--shadow)] backdrop-blur">
-            <h1 className="font-display text-2xl font-semibold text-[var(--navy-dark)]">
-              Loading your board
-            </h1>
-            <p className="mt-3 text-sm text-[var(--gray-text)]">
-              Fetching the latest updates from the server.
-            </p>
-          </section>
-        </main>
-      </div>
+      <main className="grid min-h-screen place-items-center px-4">
+        <section className="text-center" role="status">
+          <svg
+            className="mx-auto h-6 w-6 motion-safe:animate-spin text-accent"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".2" strokeWidth="3" />
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+          <h1 className="mt-4 text-base font-semibold text-ink">Loading your board</h1>
+          <p className="mt-1 text-sm text-muted">
+            Fetching the latest updates from the server.
+          </p>
+        </section>
+      </main>
     );
   }
 
   return (
-    <div>
-      {boardError ? (
-        <div className="mx-auto max-w-[1500px] px-6 pt-6">
-          <div className="rounded-2xl border border-[var(--stroke)] bg-white/90 px-4 py-3 text-sm text-[var(--secondary-purple)] shadow-[var(--shadow)]">
-            {boardError}
-          </div>
-        </div>
-      ) : null}
+    <>
       <KanbanBoard
         board={board}
         onBoardChange={handleBoardChange}
         onLogout={handleLogout}
+        username={username}
         onRenameColumn={handleRenameColumn}
         onAddCard={handleAddCard}
         onDeleteCard={handleDeleteCard}
@@ -327,6 +321,14 @@ export default function Home() {
           />
         )}
       />
-    </div>
+      {boardError ? (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-1/2 z-30 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-lg border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger shadow-lift"
+        >
+          {boardError}
+        </div>
+      ) : null}
+    </>
   );
 }

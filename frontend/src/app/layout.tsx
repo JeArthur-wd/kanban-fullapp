@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 
-const displayFont = Space_Grotesk({
-  variable: "--font-display",
-  subsets: ["latin"],
-});
-
-const bodyFont = Manrope({
-  variable: "--font-body",
+const sans = Geist({
+  variable: "--font-geist",
   subsets: ["latin"],
 });
 
@@ -24,9 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${displayFont.variable} ${bodyFont.variable}`}>
-        {children}
-      </body>
+      <body className={sans.variable}>{children}</body>
     </html>
   );
 }

@@ -5,9 +5,18 @@ import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
+const STATUS_DOTS = [
+  "var(--dot-backlog)",
+  "var(--dot-discovery)",
+  "var(--dot-progress)",
+  "var(--dot-review)",
+  "var(--dot-done)",
+];
+
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  index: number;
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
@@ -16,6 +25,7 @@ type KanbanColumnProps = {
 export const KanbanColumn = ({
   column,
   cards,
+  index,
   onRename,
   onAddCard,
   onDeleteCard,
@@ -32,28 +42,29 @@ export const KanbanColumn = ({
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
-        isColumnOver && "ring-2 ring-[var(--accent-yellow)]"
+        "flex min-w-0 flex-col rounded-xl bg-well p-2 transition-shadow duration-150",
+        isColumnOver && "shadow-[inset_0_0_0_2px_var(--accent)]"
       )}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} cards
-            </span>
-          </div>
-          <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
-          />
-        </div>
+      <div className="flex items-center gap-2 px-1.5 pb-2 pt-1">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ background: STATUS_DOTS[index % STATUS_DOTS.length] }}
+          aria-hidden
+        />
+        <input
+          value={column.title}
+          onChange={(event) => onRename(column.id, event.target.value)}
+          className="-mx-1 min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm font-semibold text-ink transition-colors hover:bg-surface/70 focus:bg-surface"
+          aria-label="Column title"
+        />
+        <span className="tabular rounded-full bg-surface/80 px-2 py-0.5 text-xs font-medium text-muted">
+          {cards.length}
+          <span className="sr-only"> cards</span>
+        </span>
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <SortableContext
           id={column.id}
           items={column.cardIds.map((cardId) => `card-${cardId}`)}
@@ -69,7 +80,7 @@ export const KanbanColumn = ({
           ))}
         </SortableContext>
         {cards.length === 0 && (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+          <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-line-strong px-3 py-6 text-center text-[13px] text-muted">
             Drop a card here
           </div>
         )}

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-13T00:00:00Z",
+  "title": "Design System: Kanban Studio",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "Signal Blue", "canonical": "#1f5fe0", "tonalRamp": ["#0b2a6b", "#123f9e", "#1a4fc0", "#1f5fe0", "#5b8bec", "#93b2f2", "#c5d6f8", "#e8effd"] },
+      "accent-strong": { "role": "primary", "displayName": "Signal Blue Pressed", "canonical": "#1a4fc0", "tonalRamp": ["#0b2a6b", "#123f9e", "#1a4fc0", "#1f5fe0", "#5b8bec", "#93b2f2", "#c5d6f8", "#e8effd"] },
+      "accent-soft": { "role": "primary", "displayName": "Blue Mist", "canonical": "#e8effd", "tonalRamp": ["#0b2a6b", "#123f9e", "#1f5fe0", "#5b8bec", "#93b2f2", "#c5d6f8", "#dde7fb", "#e8effd"] },
+      "ground": { "role": "neutral", "displayName": "Cool Ground", "canonical": "#f6f7f9", "tonalRamp": ["#172033", "#3a4457", "#566073", "#8792a5", "#c3cad6", "#dde1e8", "#eceef2", "#f6f7f9"] },
+      "well": { "role": "neutral", "displayName": "Column Well", "canonical": "#eceef2", "tonalRamp": ["#172033", "#3a4457", "#566073", "#8792a5", "#c3cad6", "#dde1e8", "#eceef2", "#f6f7f9"] },
+      "surface": { "role": "neutral", "displayName": "Paper White", "canonical": "#ffffff", "tonalRamp": ["#172033", "#566073", "#8792a5", "#c3cad6", "#dde1e8", "#eceef2", "#f6f7f9", "#ffffff"] },
+      "line": { "role": "neutral", "displayName": "Hairline", "canonical": "#dde1e8", "tonalRamp": ["#172033", "#566073", "#8792a5", "#c3cad6", "#dde1e8", "#eceef2", "#f6f7f9", "#ffffff"] },
+      "line-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "#c3cad6", "tonalRamp": ["#172033", "#566073", "#8792a5", "#c3cad6", "#dde1e8", "#eceef2", "#f6f7f9", "#ffffff"] },
+      "ink": { "role": "neutral", "displayName": "Ink Navy", "canonical": "#172033", "tonalRamp": ["#0b101c", "#172033", "#2a354b", "#3a4457", "#566073", "#8792a5", "#c3cad6", "#eceef2"] },
+      "muted": { "role": "neutral", "displayName": "Slate Muted", "canonical": "#566073", "tonalRamp": ["#172033", "#2a354b", "#3a4457", "#566073", "#6b7587", "#8792a5", "#c3cad6", "#eceef2"] },
+      "danger": { "role": "feedback", "displayName": "Danger Red", "canonical": "#b42a21", "tonalRamp": ["#4a0f0b", "#7a1b15", "#b42a21", "#d9564d", "#e88d86", "#f3bab6", "#fdecea", "#fff6f5"] },
+      "danger-soft": { "role": "feedback", "displayName": "Danger Tint", "canonical": "#fdecea", "tonalRamp": ["#7a1b15", "#b42a21", "#d9564d", "#e88d86", "#f3bab6", "#f9d3d0", "#fdecea", "#fff6f5"] },
+      "dot-backlog": { "role": "status", "displayName": "Backlog Slate", "canonical": "#8792a5", "tonalRamp": ["#2a354b", "#566073", "#6b7587", "#8792a5", "#a5aebd", "#c3cad6", "#dde1e8", "#eceef2"] },
+      "dot-discovery": { "role": "status", "displayName": "Discovery Violet", "canonical": "#7c5cdb", "tonalRamp": ["#2e1f66", "#4b3799", "#6347c4", "#7c5cdb", "#9d85e5", "#bcaeee", "#dad2f6", "#efeafb"] },
+      "dot-progress": { "role": "status", "displayName": "Progress Blue", "canonical": "#1f5fe0", "tonalRamp": ["#0b2a6b", "#123f9e", "#1a4fc0", "#1f5fe0", "#5b8bec", "#93b2f2", "#c5d6f8", "#e8effd"] },
+      "dot-review": { "role": "status", "displayName": "Review Amber", "canonical": "#d98a00", "tonalRamp": ["#4d3000", "#7d5100", "#b07000", "#d98a00", "#eba733", "#f3c36e", "#f9deaa", "#fdf1d8"] },
+      "dot-done": { "role": "status", "displayName": "Done Green", "canonical": "#1f9d6b", "tonalRamp": ["#0a3d29", "#106043", "#177f58", "#1f9d6b", "#52b890", "#8ed0b5", "#c3e7d7", "#e5f5ee"] }
+    },
+    "typographyMeta": {
+      "title-lg": { "displayName": "Title Large", "purpose": "Login heading only." },
+      "title": { "displayName": "Title", "purpose": "Wordmark in top bar and login." },
+      "body": { "displayName": "Body", "purpose": "Inputs, chat messages, default text." },
+      "body-strong": { "displayName": "Body Strong", "purpose": "Column titles and panel heading." },
+      "secondary": { "displayName": "Secondary", "purpose": "Card details, helper and empty-state text." },
+      "label": { "displayName": "Label", "purpose": "Buttons and form labels." },
+      "caption": { "displayName": "Caption", "purpose": "Count badges, composer hint, thinking text; tabular numerals." }
+    },
+    "shadows": [
+      { "name": "elev-card", "value": "0 1px 2px rgba(23, 32, 51, 0.08), 0 1px 1px rgba(23, 32, 51, 0.04)", "purpose": "Cards at rest and the open new-card form." },
+      { "name": "elev-lift", "value": "0 12px 28px rgba(23, 32, 51, 0.16), 0 3px 8px rgba(23, 32, 51, 0.1)", "purpose": "Surfaces above the board, e.g. the error toast." },
+      { "name": "elev-panel", "value": "0 1px 3px rgba(23, 32, 51, 0.08), 0 8px 24px rgba(23, 32, 51, 0.05)", "purpose": "Assistant panel and login card." }
+    ],
+    "motion": [
+      { "name": "message-in", "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Chat message entrance (fade and 6px rise). Disabled under prefers-reduced-motion." },
+      { "name": "thinking", "value": "1.2s ease-in-out infinite, 160ms stagger", "purpose": "Three-dot thinking indicator. Static at 0.6 opacity under prefers-reduced-motion." },
+      { "name": "state-transition", "value": "150ms (colors, border, shadow)", "purpose": "Hover and focus state changes on cards, buttons, fields." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Blue fill action (Add card, Send).",
+      "html": "<button class=\"ds-btn-primary\">Add card</button>",
+      "css": ".ds-btn-primary { height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: #1f5fe0; color: #fff; font: 500 13px/1.5 Geist, 'Segoe UI', system-ui, sans-serif; cursor: pointer; transition: background-color 150ms; } .ds-btn-primary:hover { background: #1a4fc0; } .ds-btn-primary:focus-visible { outline: 2px solid #1f5fe0; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: .5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Quiet secondary action (Log out).",
+      "html": "<button class=\"ds-btn-outline\">Log out</button>",
+      "css": ".ds-btn-outline { height: 32px; padding: 0 12px; border: 1px solid #dde1e8; border-radius: 6px; background: #fff; color: #172033; font: 500 13px/1.5 Geist, 'Segoe UI', system-ui, sans-serif; cursor: pointer; transition: background-color 150ms, border-color 150ms; } .ds-btn-outline:hover { border-color: #c3cad6; background: #f6f7f9; } .ds-btn-outline:focus-visible { outline: 2px solid #1f5fe0; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis action (Cancel, Add a card).",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #566073; font: 500 13px/1.5 Geist, 'Segoe UI', system-ui, sans-serif; cursor: pointer; transition: background-color 150ms, color 150ms; } .ds-btn-ghost:hover { background: #eceef2; color: #172033; } .ds-btn-ghost:focus-visible { outline: 2px solid #1f5fe0; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Single-line field with hairline border and accent focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Card title\" />",
+      "css": ".ds-input { width: 220px; padding: 6px 10px; border: 1px solid #dde1e8; border-radius: 6px; background: #fff; color: #172033; font: 500 14px/1.5 Geist, 'Segoe UI', system-ui, sans-serif; transition: border-color 150ms; } .ds-input:hover { border-color: #c3cad6; } .ds-input:focus { border-color: #1f5fe0; outline: 2px solid #1f5fe0; outline-offset: 0; }"
+    },
+    {
+      "name": "Kanban Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White 8px card with title, muted details and a hover-revealed danger delete.",
+      "html": "<article class=\"ds-card\"><div class=\"ds-card-body\"><h4>Draft roadmap</h4><p>Outline Q3 priorities with the team.</p></div><button class=\"ds-card-x\" aria-label=\"Delete\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg></button></article>",
+      "css": ".ds-card { display: flex; justify-content: space-between; gap: 8px; width: 260px; padding: 12px; border: 1px solid #dde1e8; border-radius: 8px; background: #fff; box-shadow: var(--elev-card, 0 1px 2px rgba(23,32,51,.08), 0 1px 1px rgba(23,32,51,.04)); cursor: grab; font-family: Geist, 'Segoe UI', system-ui, sans-serif; transition: border-color 150ms, box-shadow 150ms; } .ds-card:hover { border-color: #c3cad6; } .ds-card h4 { margin: 0; font: 500 14px/20px inherit; color: #172033; } .ds-card p { margin: 4px 0 0; font-size: 13px; line-height: 20px; color: #566073; } .ds-card-x { width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #566073; cursor: pointer; transition: background-color 150ms, color 150ms; } .ds-card-x:hover { background: #fdecea; color: #b42a21; } .ds-card-x:focus-visible { outline: 2px solid #1f5fe0; outline-offset: 2px; }"
+    },
+    {
+      "name": "Column Header",
+      "kind": "custom",
+      "refersTo": "column-well",
+      "description": "Well with status dot, editable title and tabular count badge.",
+      "html": "<section class=\"ds-col\"><div class=\"ds-col-head\"><span class=\"ds-dot\"></span><span class=\"ds-col-title\">In progress</span><span class=\"ds-count\">4</span></div></section>",
+      "css": ".ds-col { width: 260px; padding: 8px; border-radius: 12px; background: #eceef2; font-family: Geist, 'Segoe UI', system-ui, sans-serif; } .ds-col-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px 8px; } .ds-dot { width: 8px; height: 8px; border-radius: 9999px; background: #1f5fe0; } .ds-col-title { flex: 1; font: 600 14px/1.5 inherit; color: #172033; } .ds-count { padding: 2px 8px; border-radius: 9999px; background: rgba(255,255,255,.8); color: #566073; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Chat Messages",
+      "kind": "custom",
+      "refersTo": "message-user",
+      "description": "User (blue) and assistant (well) bubbles with a small tail corner.",
+      "html": "<div class=\"ds-chat\"><div class=\"ds-msg-assistant\">Moved the card to Review.</div><div class=\"ds-msg-user\">Move the roadmap card</div></div>",
+      "css": ".ds-chat { display: flex; flex-direction: column; gap: 12px; width: 280px; font: 400 14px/20px Geist, 'Segoe UI', system-ui, sans-serif; } .ds-msg-user { align-self: flex-end; max-width: 85%; padding: 8px 12px; border-radius: 16px 16px 6px 16px; background: #1f5fe0; color: #fff; } .ds-msg-assistant { align-self: flex-start; max-width: 90%; padding: 8px 12px; border-radius: 16px 16px 16px 6px; background: #eceef2; color: #172033; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Workbench",
+    "overview": "This is the category standard played straight: a calm, cool-tinted light board where the work is the only loud thing. Neutrals do almost all of the job; a single blue marks what is actionable (primary buttons, focus, the user's own chat bubbles) and five muted status dots are the only other colour on screen. Cards are small white sheets on slightly darker wells, separated by 1px lines and a faint shadow, so the board stays scannable when it fills.\n\nThe assistant panel is a first-class peer of the board, not a floating widget: docked, sticky, same surface vocabulary, with an explicit thinking state for slow model replies. Density is compact (14px base, 13px secondary, 32px controls) and motion is nearly absent. The system confirmed-rejects the soft-SaaS template: blurred blobs, a marketing header, tracked uppercase labels, giant radii.",
+    "keyCharacteristics": [
+      "Light only (color-scheme: light); no dark theme exists.",
+      "One accent blue; status colour is limited to a 8px dot per column.",
+      "Tonal layering (ground, well, white surface) plus 1px borders; shadows are soft and few.",
+      "Geist throughout, tabular numerals for counts.",
+      "Drawn SVG icons at 14px, stroked with currentColor."
+    ],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "Blue means \"you can act here\" or \"this is you\". It is not decoration, not a section tint, not a status colour.", "section": "colors" },
+      { "name": "The Dot-Only Status Rule", "body": "The five status hues appear only as the 8px dot beside a column title.", "section": "colors" },
+      { "name": "The Two-Greys Rule", "body": "Text is either ink or muted. Do not introduce a third text grey; the one existing hardcoded placeholder grey is drift (see below).", "section": "typography" },
+      { "name": "The Quiet Shadow Rule", "body": "Shadows are soft and ink-tinted, and a surface gets the one that matches its role. A dragged-from card drops its shadow entirely.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use `ground`, `well`, `surface` as the only background tiers, and 1px `line` borders for edges.",
+      "Do reserve Signal Blue for primary actions, focus, and the user's own chat bubbles.",
+      "Do keep status colour to the 8px column dot.",
+      "Do use 14px body, 13px secondary, 32px controls, and tabular numerals for counts.",
+      "Do pair every new interactive element with the 2px accent focus-visible ring.",
+      "Do keep motion to the existing entrance and thinking pulse, and respect prefers-reduced-motion.",
+      "Do draw new icons as 14px currentColor SVGs in the existing set."
+    ],
+    "donts": [
+      "Don't add a dark theme, gradients, blurred blobs, or a marketing header.",
+      "Don't use radii above 12px on containers (16px is bubbles only).",
+      "Don't use coloured or hard-offset shadows; use the three elevation tokens.",
+      "Don't introduce a second accent or fill surfaces with status colours.",
+      "Don't use tracked uppercase labels; hierarchy is by size, weight and ink versus muted.",
+      "Don't use emoji or glyph characters as icons."
+    ]
+  }
+}
