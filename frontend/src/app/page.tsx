@@ -27,7 +27,6 @@ export default function Home() {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState<string>(CREDENTIALS.username);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [boardError, setBoardError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -35,7 +34,6 @@ export default function Home() {
   const [isChatSending, setIsChatSending] = useState(false);
 
   const refreshBoard = useCallback(async () => {
-    setIsLoading(true);
     setBoardError(null);
     try {
       const payload = await fetchBoard(username);
@@ -43,8 +41,6 @@ export default function Home() {
     } catch (err) {
       if (process.env.NODE_ENV === "development") console.error(err);
       setBoardError("Unable to load the board from the server.");
-    } finally {
-      setIsLoading(false);
     }
   }, [username]);
 
@@ -287,7 +283,7 @@ export default function Home() {
     );
   }
 
-  if (isLoading || !board) {
+  if (!board) {
     return (
       <div className="relative min-h-screen overflow-hidden">
         <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
