@@ -1,5 +1,9 @@
 # Project Management MVP
 
+## Setup
+
+Copy `.env.example` to `.env` in the repo root and set `OPENROUTER_API_KEY`. The start scripts require this file. Without a valid key the app runs, but AI chat returns an error.
+
 ## Local run (Docker)
 
 - Mac: scripts/start-mac.sh
