@@ -1,6 +1,6 @@
 # Project plan (detailed)
 
-This plan is the single source of truth for the MVP. Each part includes a checklist, tests, and success criteria. Target 80% unit test coverage when it is sensible and adds value; prioritize robust integration testing and meaningful unit tests over coverage metrics.
+This plan is the single source of truth for the MVP. Each part includes a checklist, tests, and success criteria. The project should target roughly 80% unit test coverage when it is sensible and adds value, but quality and meaningful coverage come first; we should not add unnecessary tests only to chase a percentage.
 
 ## Part 1: Plan (current)
 
