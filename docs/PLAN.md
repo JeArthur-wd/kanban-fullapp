@@ -132,6 +132,9 @@ Notes (Part 8 decisions)
 - Use /api/chat for the connectivity endpoint.
 - Run a live call to OpenRouter for testing (no mocking).
 - Keep the OpenRouter base URL hardcoded.
+- Reconfirmed with the user: the check goes all the way to OpenRouter (no mocking) and must get a real answer from the model; `/api/chat` is the endpoint; hardcoded base URL is fine for now.
+- Verified live (2026-10-13): the first key was expired (401), and the replacement account had no credits (402) for `openai/gpt-oss-120b`. At the user's request the local `.env` now sets `OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free` (read in `config.py`; the code default is still `openai/gpt-oss-120b`). `/api/chat` returned "4" for the 2+2 prompt and `test_live_chat_openrouter` passed.
+- Free models can be rate-limited upstream (429); `google/gemma-4-26b-a4b-it:free` was when tried. Remove the `OPENROUTER_MODEL` line from `.env` to go back to `openai/gpt-oss-120b` once the account has credits.
 
 Tests
 - [x] Unit test that returns 500 when OPENROUTER_API_KEY is missing.
@@ -170,6 +173,11 @@ Tests
 Success criteria
 - Structured outputs reliably update the Kanban without errors.
 - Tests demonstrate correct parsing and persistence.
+
+Notes (Part 9 review)
+- Schema-invalid model output (e.g. unknown action type) raised an unhandled pydantic `ValidationError` and returned 500. `parse_structured_output` now returns 502, matching the other bad-model-output cases.
+- Added tests for JSON wrapped in prose, non-JSON output and schema-invalid output (backend: 23 passed, 3 live tests skipped, 91% coverage).
+- Verified against the live free model: "add a card" via `/api/chat` returned valid structured JSON (a `create_card` action), the card was persisted and returned in `board`. The test card was deleted afterwards.
 
 ## Part 10: AI chat sidebar UI
 

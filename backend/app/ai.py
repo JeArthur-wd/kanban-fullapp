@@ -3,6 +3,7 @@ import sqlite3
 
 import httpx
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.config import (
     OPENROUTER_BASE_URL,
@@ -38,7 +39,12 @@ def parse_structured_output(content: str) -> StructuredChatOutput:
                 ) from inner_exc
         else:
             raise HTTPException(status_code=502, detail="OpenRouter returned invalid JSON") from exc
-    return StructuredChatOutput.model_validate(data)
+    try:
+        return StructuredChatOutput.model_validate(data)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=502, detail="OpenRouter returned an unexpected response shape"
+        ) from exc
 
 
 def call_openrouter(messages: list[dict[str, str]]) -> tuple[str, str | None]:

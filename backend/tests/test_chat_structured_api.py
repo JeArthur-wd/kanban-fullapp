@@ -67,3 +67,28 @@ def test_chat_applies_actions(monkeypatch, tmp_path: Path) -> None:
 
     updated_board = payload["board"]
     assert any(card["title"] == "AI created" for card in updated_board["cards"].values())
+
+
+def _post_with_model_content(monkeypatch, tmp_path: Path, content: str):
+    client = _make_client(tmp_path)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(ai_module.httpx, "post", lambda *_a, **_k: _DummyResponse(content))
+    return client.post("/api/chat", json={"message": "Do something."})
+
+
+def test_chat_accepts_json_wrapped_in_text(monkeypatch, tmp_path: Path) -> None:
+    content = 'Sure! {"reply": "Done.", "actions": []} Hope that helps.'
+    response = _post_with_model_content(monkeypatch, tmp_path, content)
+    assert response.status_code == 200
+    assert response.json()["response"] == "Done."
+
+
+def test_chat_rejects_non_json(monkeypatch, tmp_path: Path) -> None:
+    response = _post_with_model_content(monkeypatch, tmp_path, "no json here")
+    assert response.status_code == 502
+
+
+def test_chat_rejects_schema_invalid_output(monkeypatch, tmp_path: Path) -> None:
+    content = json.dumps({"reply": "Hi", "actions": [{"type": "explode_board"}]})
+    response = _post_with_model_content(monkeypatch, tmp_path, content)
+    assert response.status_code == 502
