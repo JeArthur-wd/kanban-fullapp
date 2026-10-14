@@ -212,5 +212,22 @@ Decisions
 
 Known follow-ups
 - Not built (scope was look and feel only, awaiting a decision): highlight of cards the assistant just changed, clickable example prompts in the empty chat, and reworded login copy (currently "explore the MVP").
-- `handleDragEnd` in `KanbanBoard.tsx` calls `onMoveCard` inside the `setBoard` updater. Updaters should be pure and may run twice in React Strict Mode (dev), sending a duplicate move request. Harmless today because the move is idempotent, but worth moving out of the updater.
 - No unit test covers the "no loading screen on background refresh" behavior.
+
+## Code review remediation
+
+All High and Medium findings in `docs/code_review.md` were fixed and covered by new tests. For the path traversal, the same-column reorder, the stale refresh and the swallowed error toasts, the new tests were confirmed to fail against the old code.
+
+- Static file serving resolves the path and refuses anything outside the exported site (path traversal).
+- Real sign-in: `POST /api/login` checks the credentials on the server and sets a signed HTTP-only cookie; every other `/api` route returns 401 without it; the `X-User` header is ignored. Chat has length limits (message 4000 characters, 20 history items) and a rate limit; login is rate limited too. The page checks `GET /api/session` on load, so a reload no longer signs the user out.
+- `backend/app/board_ops.py` is the single implementation of column and card ordering, used by the REST routes and by the AI actions. This fixed moving a card down inside its own column.
+- AI actions: bad ids and invalid titles are skipped, not errors; the response lists `skipped` actions and the reply says what was not applied. OpenRouter 429 and credit/key errors give clear messages; a non-JSON upstream body and timeouts are handled. The board is sent to the model once; failure notices are not sent back as history.
+- SQLite: foreign keys on, WAL, 10 second busy timeout, upserts for users and boards, and seed data is created with the board (no re-seeding after deleting all columns).
+- Frontend: retry view when the first board load fails; board action errors now show (the message is set after the refresh); stale board responses are dropped; column titles save on blur or Enter and an empty title reverts; drag-end no longer calls the API inside a state updater and skips no-op drops; keyboard dragging works (`KeyboardSensor`).
+- Dependencies: `next` and `eslint-config-next` 16.4.0 plus `npm audit fix`; `npm audit --omit=dev` reports 0 vulnerabilities. The remaining dev-only advisories (Vitest's `tinypool` and similar) need a Vitest major upgrade and are not shipped.
+
+Structure: `main.py` is now a small `create_app()` factory (endpoints moved to `routes/health.py`, static mounting to `routes/static.py`); `ai.py` became the `app/ai/` package (client, prompts, parsing, actions) and `models.py` became `app/models/` (board, chat). Public import paths are unchanged.
+
+Not done (Low items in the review): untracking `frontend/test-results`, pinning Python requirements, CI, migrations framework, and splitting `page.tsx`.
+
+Deployment note: set `PM_SESSION_SECRET` (and a new `PM_LOGIN_PASSWORD`) as Fly secrets before the next deploy. Without `PM_SESSION_SECRET`, sessions end whenever the machine restarts.

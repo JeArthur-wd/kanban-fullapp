@@ -8,7 +8,7 @@ A Project Management MVP web app with a Kanban board and AI chat assistant. User
 
 **Stack:** Next.js 16 frontend (React 19, TypeScript, Tailwind v4, @dnd-kit), statically exported and served by a Python FastAPI backend, SQLite database, all packaged in one Docker image. AI via OpenRouter (default model `openai/gpt-oss-120b`).
 
-**MVP constraints:** Hardcoded login (`user`/`password`), one board per user, fixed (renamable) columns. The DB schema supports multiple users.
+**MVP constraints:** One login (`user`/`password` by default, checked on the server), one board per user, fixed (renamable) columns. The DB schema supports multiple users.
 
 ## Commands
 
@@ -54,20 +54,22 @@ PM_BASE_URL=http://127.0.0.1:8000 pytest tests/test_integration.py   # Live test
 ## Architecture
 
 **Backend (`backend/app/`):**
-- `main.py` - FastAPI app, lifespan (`init_db()`), `/health`, `/api/hello`, mounts `_next` and `static` from the exported frontend, includes the routers.
-- `routes/board.py` - `GET /api/board`, plus POST/PATCH/DELETE for `/api/columns` and `/api/cards`. `routes/chat.py` - `POST /api/chat`. `routes/static.py` - serves the exported frontend at `/` with a catch-all fallback (registered last).
-- `database.py` - raw `sqlite3` (no ORM): schema, seeding (`config.INITIAL_COLUMNS`), `fetch_board`, and `resequence_positions` for ordering. `dependencies.py` - `get_db` (per-request connection) and `get_username`.
-- `ai.py` - OpenRouter call, prompt building, parsing, and `apply_actions`. `models.py` - Pydantic request/response and action models.
+- `main.py` - `create_app()` factory (lifespan runs `init_db()`, mounts `_next` and `static` from the exported frontend, includes the routers) and the module-level `app` that uvicorn runs. No endpoints live here; `routes/health.py` has `/health` and `/api/hello`.
+- `routes/auth.py` - `POST /api/login`, `POST /api/logout`, `GET /api/session`. `routes/board.py` - `GET /api/board`, plus POST/PATCH/DELETE for `/api/columns` and `/api/cards`. `routes/chat.py` - `POST /api/chat`. `routes/static.py` - serves the exported frontend at `/` with a catch-all fallback (registered last; resolves paths and refuses anything outside the static root).
+- `board_ops.py` - the one place that creates, moves and deletes columns and cards (ordering, ownership checks). Both the REST routes and the AI actions call it; do not copy ordering code elsewhere.
+- `database.py` - raw `sqlite3` (no ORM): schema, foreign keys on, WAL, seeding (`config.INITIAL_COLUMNS`, done when a board is first created), `fetch_board`, and `resequence_positions`. `dependencies.py` - `get_db` (per-request connection) and `get_username` (reads the session cookie, 401 if missing).
+- `auth.py` - HMAC-signed session cookie. `ratelimit.py` - small in-memory limiter used for login and chat.
+- `ai/` - the AI chat pieces: `client.py` (OpenRouter call and upstream error mapping), `prompts.py`, `parsing.py` (model text to validated output), `actions.py` (`apply_actions`, via `board_ops`). `models/` - Pydantic models: `board.py` (REST requests) and `chat.py` (chat request/response, AI actions). Both packages re-export their public names, so `from app.ai import ...` and `from app.models import ...` work.
 - `config.py` - env config. Paths: `PM_DB_PATH` (default `backend/data/pm.db`), `PM_STATIC_DIR` (default `frontend/out`). Model: `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_TEMPERATURE`.
 
-**Identity is not real auth.** The frontend login is client-side only; the backend identifies the user from an `X-User` header (default `user`) and creates the user and a seeded board on first use. Every query is scoped by that user's board.
+**Auth.** `POST /api/login` checks the credentials on the server (`PM_LOGIN_USER` / `PM_LOGIN_PASSWORD`, default `user` / `password`) and sets a signed, HTTP-only, SameSite=Lax session cookie (`pm_session`, 7 days). Every other `/api` route needs it (401 otherwise); the `X-User` header is no longer read. Set `PM_SESSION_SECRET` (a Fly secret in production) so sessions survive restarts; without it a random key is made per process. The user and a seeded board are created on first use. Every query is scoped by that user's board. Limits: `/api/login` 10 per minute per client, `/api/chat` 20 per minute per user, chat message 4000 characters, history 20 items.
 
 **AI chat flow (`/api/chat`):** load the user's board, send board JSON + history + message to the model, parse the reply as structured JSON (`reply` + `actions`; may be wrapped in prose), apply actions (`create_card`, `update_card`, `move_card`, `delete_card`) when `apply_updates` is true, and return the reply plus the refreshed board. Unparseable or schema-invalid model output returns 502; a missing API key returns 500. Schemas are documented in `docs/ai-structured-output.json` and `docs/kanban-schema.json`.
 
 **Frontend (`frontend/src/`):**
 - `app/page.tsx` - login gate and board page.
 - `components/KanbanBoard.tsx` - board state owner, drag-and-drop handling, optimistic updates, background re-fetch after drop/add/delete (the full-screen loading view appears only on the initial load). `ChatSidebar.tsx` - AI chat UI.
-- `lib/api.ts` - API client (30s timeout, sets `X-User`). `lib/kanban.ts` - types and ID helpers.
+- `lib/api.ts` - API client (30s timeout, cookie session, `ApiError` carries the server's `detail`, a 401 anywhere returns the user to the login screen). `lib/kanban.ts` - types and ID helpers.
 
 **ID prefixing:** the frontend prefixes backend numeric IDs with `col-` and `card-` for drag-and-drop stability and strips them before API calls (`toCardId`/`toColumnId` in `lib/kanban.ts`).
 
