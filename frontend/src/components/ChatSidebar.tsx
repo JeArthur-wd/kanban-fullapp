@@ -114,6 +114,7 @@ export const ChatSidebar = ({
             rows={2}
             className="block w-full resize-none rounded-lg bg-transparent px-3 pt-2.5 text-sm leading-5 text-ink outline-none"
             aria-label="Chat message"
+            maxLength={4000}
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-1">
             <span className="px-1 text-xs text-muted">Shift + Enter for a new line</span>

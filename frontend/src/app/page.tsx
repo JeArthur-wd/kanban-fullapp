@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type SetStateAction,
@@ -11,10 +12,15 @@ import { ChatSidebar } from "@/components/ChatSidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { BoardMark } from "@/components/icons";
 import {
-  fetchBoard,
+  ApiError,
   createCard,
   deleteCard,
+  fetchBoard,
+  fetchSession,
+  login,
+  logout,
   sendChat,
+  setUnauthorizedHandler,
   toBoardData,
   updateCard,
   updateColumn,
@@ -22,31 +28,73 @@ import {
 } from "@/lib/api";
 import { findCardLocation, fromCardId, fromColumnId, type BoardData } from "@/lib/kanban";
 
-const CREDENTIALS = { username: "user", password: "password" };
+// Keep in step with CHAT_HISTORY_MAX_ITEMS and the history content limit on the server.
+const CHAT_HISTORY_LIMIT = 20;
+const CHAT_CONTENT_LIMIT = 8000;
+const BOARD_ERROR_MS = 6000;
 
 const inputClass =
   "mt-1.5 h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink transition-colors hover:border-line-strong focus:border-accent";
 
+const Spinner = () => (
+  <svg
+    className="mx-auto h-6 w-6 motion-safe:animate-spin text-accent"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden
+  >
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".2" strokeWidth="3" />
+    <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+);
+
 export default function Home() {
   const [board, setBoard] = useState<BoardData | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [username, setUsername] = useState<string>(CREDENTIALS.username);
+  const [username, setUsername] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [boardError, setBoardError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatSending, setIsChatSending] = useState(false);
+  // Only the newest board response may be applied; older ones are dropped.
+  const refreshSeq = useRef(0);
+
+  const resetSession = useCallback(() => {
+    refreshSeq.current += 1;
+    setUsername(null);
+    setBoard(null);
+    setBoardError(null);
+    setChatMessages([]);
+    setChatError(null);
+  }, []);
 
   const refreshBoard = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     setBoardError(null);
     try {
-      const payload = await fetchBoard(username);
-      setBoard(toBoardData(payload));
+      const payload = await fetchBoard();
+      if (seq === refreshSeq.current) {
+        setBoard(toBoardData(payload));
+      }
     } catch (err) {
       if (process.env.NODE_ENV === "development") console.error(err);
-      setBoardError("Unable to load the board from the server.");
+      if (seq === refreshSeq.current) {
+        setBoardError("Unable to load the board from the server.");
+      }
     }
-  }, [username]);
+  }, []);
+
+  // Put the board back in sync with the server, then say what went wrong. The message is
+  // set after the refresh because the refresh clears any earlier message.
+  const recoverFrom = useCallback(
+    async (err: unknown, message: string) => {
+      if (process.env.NODE_ENV === "development") console.error(err);
+      await refreshBoard();
+      setBoardError(message);
+    },
+    [refreshBoard]
+  );
 
   const handleBoardChange = useCallback(
     (updater: SetStateAction<BoardData>) => {
@@ -60,36 +108,70 @@ export default function Home() {
     []
   );
 
-  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const username = String(formData.get("username") || "").trim();
-    const password = String(formData.get("password") || "").trim();
-
-    if (username === CREDENTIALS.username && password === CREDENTIALS.password) {
-      setUsername(username);
-      setIsAuthenticated(true);
-      setError(null);
-      event.currentTarget.reset();
-      return;
-    }
-
-    setError("Incorrect username or password.");
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setBoard(null);
-    setBoardError(null);
-    setChatMessages([]);
-    setChatError(null);
-  };
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      resetSession();
+      setError("Your session has ended. Please sign in again.");
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [resetSession]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    let cancelled = false;
+    fetchSession()
+      .then((session) => {
+        if (cancelled) return;
+        setUsername(session.username);
+        refreshBoard();
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSessionChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshBoard]);
+
+  useEffect(() => {
+    if (!boardError || !board) return;
+    const timer = setTimeout(() => setBoardError(null), BOARD_ERROR_MS);
+    return () => clearTimeout(timer);
+  }, [boardError, board]);
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const enteredUsername = String(formData.get("username") || "").trim();
+    const enteredPassword = String(formData.get("password") || "");
+
+    try {
+      const session = await login(enteredUsername, enteredPassword);
+      setError(null);
+      form.reset();
+      setUsername(session.username);
       refreshBoard();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setError("Incorrect username or password.");
+      } else if (err instanceof ApiError && err.detail) {
+        setError(err.detail);
+      } else {
+        setError("Unable to sign in right now. Please try again.");
+      }
     }
-  }, [isAuthenticated, refreshBoard]);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // The local state is cleared either way; an expired session needs no server call.
+    }
+    resetSession();
+    setError(null);
+  };
 
   const handleRenameColumn = async (columnId: string, title: string) => {
     const columnIdNumber = Number(fromColumnId(columnId));
@@ -98,11 +180,9 @@ export default function Home() {
       return;
     }
     try {
-      await updateColumn(columnIdNumber, { title }, username);
+      await updateColumn(columnIdNumber, { title });
     } catch (err) {
-      if (process.env.NODE_ENV === "development") console.error(err);
-      setBoardError("Unable to save column changes.");
-      refreshBoard();
+      await recoverFrom(err, "Unable to save column changes.");
     }
   };
 
@@ -113,19 +193,14 @@ export default function Home() {
       return;
     }
     try {
-      await createCard(
-        {
-          column_id: columnIdNumber,
-          title,
-          details: details || "No details yet.",
-        },
-        username
-      );
+      await createCard({
+        column_id: columnIdNumber,
+        title,
+        details: details || "No details yet.",
+      });
       refreshBoard();
     } catch (err) {
-      if (process.env.NODE_ENV === "development") console.error(err);
-      setBoardError("Unable to add the card.");
-      refreshBoard();
+      await recoverFrom(err, "Unable to add the card.");
     }
   };
 
@@ -135,20 +210,14 @@ export default function Home() {
       return;
     }
     try {
-      await deleteCard(cardIdNumber, username);
+      await deleteCard(cardIdNumber);
       refreshBoard();
     } catch (err) {
-      if (process.env.NODE_ENV === "development") console.error(err);
-      setBoardError("Unable to remove the card.");
-      refreshBoard();
+      await recoverFrom(err, "Unable to remove the card.");
     }
   };
 
-  const handleMoveCard = async (
-    activeId: string,
-    _overId: string,
-    nextColumns: BoardData["columns"]
-  ) => {
+  const handleMoveCard = async (activeId: string, nextColumns: BoardData["columns"]) => {
     const location = findCardLocation(nextColumns, activeId);
     if (!location) {
       return;
@@ -159,62 +228,69 @@ export default function Home() {
       return;
     }
     try {
-      await updateCard(
-        cardIdNumber,
-        {
-          column_id: columnIdNumber,
-          position: location.index,
-        },
-        username
-      );
+      await updateCard(cardIdNumber, {
+        column_id: columnIdNumber,
+        position: location.index,
+      });
       refreshBoard();
     } catch (err) {
-      if (process.env.NODE_ENV === "development") console.error(err);
-      setBoardError("Unable to move the card.");
-      refreshBoard();
+      await recoverFrom(err, "Unable to move the card.");
     }
   };
-
-  const welcomeCopy =
-    "Sign in to continue to your Kanban board. Use the demo credentials to explore the MVP.";
 
   const handleSendChat = async (message: string) => {
     setChatError(null);
     setIsChatSending(true);
     const userMessage: ChatMessage = { role: "user", content: message };
-    const history = [...chatMessages];
+    const history = chatMessages
+      .filter((item) => !item.isError)
+      .slice(-CHAT_HISTORY_LIMIT)
+      .map(({ role, content }) => ({ role, content: content.slice(0, CHAT_CONTENT_LIMIT) }));
     setChatMessages((prev) => [...prev, userMessage]);
 
     try {
-      const response = await sendChat(
-        {
-          message,
-          history,
-          apply_updates: true,
-        },
-        username
-      );
+      const response = await sendChat({
+        message,
+        history,
+        apply_updates: true,
+      });
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: response.response,
       };
       setChatMessages((prev) => [...prev, assistantMessage]);
       if (response.board) {
+        refreshSeq.current += 1;
         setBoard(toBoardData(response.board));
       }
     } catch (err) {
       if (process.env.NODE_ENV === "development") console.error(err);
-      setChatError("Unable to reach the assistant right now.");
+      const text =
+        err instanceof ApiError && err.detail
+          ? err.detail
+          : "Unable to reach the assistant right now.";
+      setChatError(text);
       setChatMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Something went wrong. Please try again." },
+        { role: "assistant", content: "Something went wrong. Please try again.", isError: true },
       ]);
     } finally {
       setIsChatSending(false);
     }
   };
 
-  if (!isAuthenticated) {
+  if (!sessionChecked) {
+    return (
+      <main className="grid min-h-screen place-items-center px-4">
+        <section className="text-center" role="status">
+          <Spinner />
+          <h1 className="mt-4 text-base font-semibold text-ink">Loading</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (!username) {
     return (
       <main className="grid min-h-screen place-items-center px-4 py-12">
         <section className="w-full max-w-[400px] rounded-xl border border-line bg-surface p-8 shadow-panel">
@@ -227,7 +303,9 @@ export default function Home() {
           <h1 className="mt-8 text-2xl font-semibold tracking-tight text-ink">
             Welcome back
           </h1>
-          <p className="mt-2 text-sm leading-6 text-muted">{welcomeCopy}</p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Sign in to continue to your Kanban board. Use the demo credentials to explore the MVP.
+          </p>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
@@ -280,18 +358,29 @@ export default function Home() {
   }
 
   if (!board) {
+    if (boardError) {
+      return (
+        <main className="grid min-h-screen place-items-center px-4">
+          <section className="text-center">
+            <h1 className="text-base font-semibold text-ink">Could not load your board</h1>
+            <p role="alert" className="mt-1 text-sm text-danger">
+              {boardError}
+            </p>
+            <button
+              type="button"
+              onClick={refreshBoard}
+              className="mt-4 h-9 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+            >
+              Try again
+            </button>
+          </section>
+        </main>
+      );
+    }
     return (
       <main className="grid min-h-screen place-items-center px-4">
         <section className="text-center" role="status">
-          <svg
-            className="mx-auto h-6 w-6 motion-safe:animate-spin text-accent"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden
-          >
-            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".2" strokeWidth="3" />
-            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
+          <Spinner />
           <h1 className="mt-4 text-base font-semibold text-ink">Loading your board</h1>
           <p className="mt-1 text-sm text-muted">
             Fetching the latest updates from the server.

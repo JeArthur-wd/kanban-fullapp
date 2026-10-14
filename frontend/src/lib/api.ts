@@ -8,12 +8,41 @@ type BoardResponse = {
 };
 
 type ApiOptions = {
-    username?: string;
+    // The login and session calls report 401 themselves instead of ending the session.
+    handleUnauthorized?: boolean;
 };
 
 export type ChatMessage = {
     role: "user" | "assistant";
     content: string;
+    // Error notices shown in the chat are not real replies and are not sent back to the model.
+    isError?: boolean;
+};
+
+export class ApiError extends Error {
+    status: number;
+    detail: string | null;
+
+    constructor(status: number, detail: string | null) {
+        super(detail ?? `Request failed (${status})`);
+        this.status = status;
+        this.detail = detail;
+    }
+}
+
+let unauthorizedHandler: (() => void) | null = null;
+
+export const setUnauthorizedHandler = (handler: (() => void) | null) => {
+    unauthorizedHandler = handler;
+};
+
+const readDetail = async (response: Response): Promise<string | null> => {
+    try {
+        const body = JSON.parse(await response.text());
+        return typeof body?.detail === "string" ? body.detail : null;
+    } catch {
+        return null;
+    }
 };
 
 type ChatAction = {
@@ -24,6 +53,7 @@ type ChatAction = {
 type ChatResponse = {
     response: string;
     actions: ChatAction[];
+    skipped?: Array<{ type: string; reason: string }>;
     board?: BoardResponse;
     model?: string | null;
 };
@@ -42,9 +72,6 @@ const apiFetch = async <T>(
     try {
         const headers = new Headers(options.headers);
         headers.set("Content-Type", "application/json");
-        if (apiOptions.username) {
-            headers.set("X-User", apiOptions.username);
-        }
 
         const response = await fetch(`${apiBase}${path}`, {
             ...options,
@@ -53,8 +80,10 @@ const apiFetch = async <T>(
         });
 
         if (!response.ok) {
-            const message = await response.text();
-            throw new Error(message || "Request failed");
+            if (response.status === 401 && apiOptions.handleUnauthorized !== false) {
+                unauthorizedHandler?.();
+            }
+            throw new ApiError(response.status, await readDetail(response));
         }
 
         if (response.status === 204) {
@@ -85,46 +114,58 @@ export const toBoardData = (payload: BoardResponse): BoardData => {
     };
 };
 
-export const fetchBoard = (username?: string) =>
-    apiFetch<BoardResponse>("/api/board", {}, { username });
+export const login = (username: string, password: string) =>
+    apiFetch<{ username: string }>(
+        "/api/login",
+        { method: "POST", body: JSON.stringify({ username, password }) },
+        { handleUnauthorized: false }
+    );
+
+export const logout = () => apiFetch("/api/logout", { method: "POST" });
+
+export const fetchSession = () =>
+    apiFetch<{ username: string }>("/api/session", {}, { handleUnauthorized: false });
+
+export const fetchBoard = () => apiFetch<BoardResponse>("/api/board");
 
 export const updateColumn = (
     columnId: number,
-    payload: { title?: string; position?: number },
-    username?: string
+    payload: { title?: string; position?: number }
 ) =>
     apiFetch(`/api/columns/${columnId}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
-    }, { username });
+    });
 
-export const createCard = (
-    payload: { column_id: number; title: string; details: string; position?: number },
-    username?: string
-) =>
+export const createCard = (payload: {
+    column_id: number;
+    title: string;
+    details: string;
+    position?: number;
+}) =>
     apiFetch<{ id: string }>("/api/cards", {
         method: "POST",
         body: JSON.stringify(payload),
-    }, { username });
+    });
 
 export const updateCard = (
     cardId: number,
-    payload: { title?: string; details?: string; column_id?: number; position?: number },
-    username?: string
+    payload: { title?: string; details?: string; column_id?: number; position?: number }
 ) =>
     apiFetch(`/api/cards/${cardId}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
-    }, { username });
+    });
 
-export const deleteCard = (cardId: number, username?: string) =>
-    apiFetch(`/api/cards/${cardId}`, { method: "DELETE" }, { username });
+export const deleteCard = (cardId: number) =>
+    apiFetch(`/api/cards/${cardId}`, { method: "DELETE" });
 
-export const sendChat = (
-    payload: { message: string; history: ChatMessage[]; apply_updates: boolean },
-    username?: string
-) =>
+export const sendChat = (payload: {
+    message: string;
+    history: ChatMessage[];
+    apply_updates: boolean;
+}) =>
     apiFetch<ChatResponse>("/api/chat", {
         method: "POST",
         body: JSON.stringify(payload),
-    }, { username });
+    });

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -15,6 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { BoardMark, LogOutIcon } from "@/components/icons";
@@ -28,7 +30,7 @@ type KanbanBoardProps = {
   onRenameColumn?: (columnId: string, title: string) => void;
   onAddCard?: (columnId: string, title: string, details: string) => void;
   onDeleteCard?: (columnId: string, cardId: string) => void;
-  onMoveCard?: (activeId: string, overId: string, nextColumns: Column[]) => void;
+  onMoveCard?: (activeId: string, nextColumns: Column[]) => void;
   sidebar?: ReactNode;
 };
 
@@ -49,10 +51,12 @@ export const KanbanBoard = ({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
-  const cardsById = useMemo(() => board.cards, [board.cards]);
   const lastOverId = useRef<string | null>(null);
 
   const collisionDetection: CollisionDetection = useMemo(
@@ -105,18 +109,16 @@ export const KanbanBoard = ({
       return;
     }
 
-    const overId = resolvedOverId;
-
-    setBoard((prev) => {
-      const nextColumns = moveCard(prev.columns, activeId, overId);
-      onMoveCard?.(activeId, overId, nextColumns);
-      return {
-        ...prev,
-        columns: nextColumns,
-      };
-    });
-
     lastOverId.current = null;
+
+    // Work out the new order from the current props, outside the state updater, so the
+    // updater stays pure and the server is told once per drop.
+    const nextColumns = moveCard(board.columns, activeId, resolvedOverId);
+    if (nextColumns === board.columns) {
+      return;
+    }
+    setBoard((prev) => ({ ...prev, columns: nextColumns }));
+    onMoveCard?.(activeId, nextColumns);
   };
 
   const handleDragOver = (event: { active: DragEndEvent["active"]; over: DragEndEvent["over"] }) => {
@@ -182,7 +184,7 @@ export const KanbanBoard = ({
     onDeleteCard?.(columnId, cardId);
   };
 
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const activeCard = activeCardId ? board.cards[activeCardId] : null;
 
   return (
     <div className="flex min-h-screen flex-col">
