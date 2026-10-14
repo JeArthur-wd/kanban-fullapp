@@ -1,9 +1,9 @@
 import sqlite3
 from typing import Generator
 
-from fastapi import Header
+from fastapi import HTTPException, Request
 
-from app.config import DEFAULT_USER
+from app.auth import SESSION_COOKIE, read_session_token
 from app.database import connect_db
 
 
@@ -15,5 +15,8 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
         conn.close()
 
 
-def get_username(x_user: str | None = Header(default=None)) -> str:
-    return x_user or DEFAULT_USER
+def get_username(request: Request) -> str:
+    username = read_session_token(request.cookies.get(SESSION_COOKIE))
+    if username is None:
+        raise HTTPException(status_code=401, detail="Not signed in")
+    return username

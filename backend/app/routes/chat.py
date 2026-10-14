@@ -3,11 +3,15 @@ import sqlite3
 from fastapi import APIRouter, Depends
 
 from app.ai import apply_actions, build_structured_messages, call_openrouter, parse_structured_output
+from app.config import CHAT_RATE_LIMIT
 from app.database import fetch_board, get_or_create_user
 from app.dependencies import get_db, get_username
 from app.models import ChatRequest, ChatResponse
+from app.ratelimit import RateLimiter
 
 router = APIRouter()
+
+chat_limiter = RateLimiter(CHAT_RATE_LIMIT)
 
 
 @router.post("/api/chat", response_model=ChatResponse)
@@ -16,6 +20,7 @@ def chat(
     username: str = Depends(get_username),
     conn: sqlite3.Connection = Depends(get_db),
 ) -> ChatResponse:
+    chat_limiter.check(username, "Too many messages. Please wait a moment before sending more.")
     user_id = get_or_create_user(conn, username)
     board = fetch_board(conn, user_id)
     messages = build_structured_messages(board, payload.history, payload.message)

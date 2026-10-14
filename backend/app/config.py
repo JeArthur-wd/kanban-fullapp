@@ -12,9 +12,6 @@ OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/ap
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b")
 OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0"))
 
-# Kept until the session cookie replaces the X-User header.
-DEFAULT_USER = "user"
-
 # Sign-in. The MVP has one account; override with PM_LOGIN_USER / PM_LOGIN_PASSWORD.
 DEFAULT_LOGIN_USER = "user"
 DEFAULT_LOGIN_PASSWORD = "password"

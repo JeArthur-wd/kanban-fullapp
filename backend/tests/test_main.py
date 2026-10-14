@@ -114,7 +114,7 @@ def test_create_app_builds_independent_apps_with_all_routes() -> None:
     first, second = create_app(), create_app()
     assert first is not second
     paths = set(first.openapi()["paths"])
-    for expected in ["/health", "/api/hello", "/api/board", "/api/chat"]:
+    for expected in ["/health", "/api/hello", "/api/login", "/api/board", "/api/chat"]:
         assert expected in paths
     assert TestClient(second).get("/health").json() == {"status": "ok"}
 
