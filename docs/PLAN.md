@@ -202,6 +202,8 @@ Done
 - [x] Fixed the full-board flash after drag-and-drop (see Part 7 design decisions).
 
 - [x] Restyled the whole UI to a clean, light "category standard" look (one blue accent, Geist type, muted per-column status dots, drawn SVG icons, slim top bar, thinking state in the chat). Look and feel only; behavior, data and API unchanged. Product and design records are in `PRODUCT.md` and `DESIGN.md`.
+- [x] Deployed to Fly.io: https://kanban-studio.fly.dev (app `kanban-studio`, region iad, one shared-cpu-1x 512 MB machine that stops when idle, 1 GB volume `pm_data` at `/data`, `PM_DB_PATH=/data/pm.db`). Secrets `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` are set on Fly, not in the repo. Verified live: `/health`, sign-in, board data, a real assistant reply, and data surviving a machine restart.
+- [x] Added `docker-entrypoint.sh`: a Fly volume mounts owned by root, so the container now chowns `/data` and then drops to the unprivileged `appuser` (checked locally with a root-owned volume).
 
 Decisions
 - The project lives in its own repo, `JeArthur-wd/kanban-fullapp` (`main`). The original remote was renamed `upstream` (ed-donner/pm).
@@ -210,6 +212,5 @@ Decisions
 
 Known follow-ups
 - Not built (scope was look and feel only, awaiting a decision): highlight of cards the assistant just changed, clickable example prompts in the empty chat, and reworded login copy (currently "explore the MVP").
-- Deployment to a Docker cloud host (Fly.io suggested) is not done yet.
 - `handleDragEnd` in `KanbanBoard.tsx` calls `onMoveCard` inside the `setBoard` updater. Updaters should be pure and may run twice in React Strict Mode (dev), sending a duplicate move request. Harmless today because the move is idempotent, but worth moving out of the updater.
 - No unit test covers the "no loading screen on background refresh" behavior.

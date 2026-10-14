@@ -31,7 +31,9 @@ RUN useradd -m -u 1000 appuser && \
     mkdir -p /app/backend/data && \
     chown -R appuser:appuser /app
 
-USER appuser
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 8000
 
