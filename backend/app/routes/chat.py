@@ -22,13 +22,20 @@ def chat(
     content, model = call_openrouter(messages)
     structured = parse_structured_output(content)
 
-    if payload.apply_updates and structured.actions:
-        apply_actions(conn, user_id, structured.actions)
+    reply = structured.reply
+    actions = structured.actions
+    skipped = []
+    if payload.apply_updates and actions:
+        actions, skipped = apply_actions(conn, user_id, actions)
         board = fetch_board(conn, user_id)
+        if skipped:
+            reasons = "; ".join(sorted({item.reason for item in skipped}))
+            reply = f"{reply}\n\nNot applied ({len(skipped)} of {len(skipped) + len(actions)}): {reasons}."
 
     return ChatResponse(
-        response=structured.reply,
-        actions=structured.actions,
+        response=reply,
+        actions=actions,
+        skipped=skipped,
         board=board,
         model=model,
     )

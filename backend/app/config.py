@@ -1,4 +1,5 @@
 import os
+import secrets
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,8 +12,23 @@ OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/ap
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b")
 OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0"))
 
-# Database configuration
+# Kept until the session cookie replaces the X-User header.
 DEFAULT_USER = "user"
+
+# Sign-in. The MVP has one account; override with PM_LOGIN_USER / PM_LOGIN_PASSWORD.
+DEFAULT_LOGIN_USER = "user"
+DEFAULT_LOGIN_PASSWORD = "password"
+SESSION_TTL_SECONDS = 7 * 24 * 3600
+# Without PM_SESSION_SECRET a random key is made per process, so sessions end on restart.
+_FALLBACK_SESSION_SECRET = secrets.token_hex(32)
+
+# AI chat limits
+CHAT_MESSAGE_MAX_CHARS = 4000
+CHAT_HISTORY_MAX_ITEMS = 20
+CHAT_RATE_LIMIT = 20  # requests per minute
+LOGIN_RATE_LIMIT = 10  # attempts per minute
+
+# Database configuration
 DEFAULT_BOARD_TITLE = "My Board"
 
 # Initial seed data for new boards
@@ -60,3 +76,14 @@ def resolve_static_dir() -> Path | None:
 
 def get_openrouter_api_key() -> str | None:
     return os.getenv("OPENROUTER_API_KEY")
+
+
+def get_login_credentials() -> tuple[str, str]:
+    return (
+        os.getenv("PM_LOGIN_USER") or DEFAULT_LOGIN_USER,
+        os.getenv("PM_LOGIN_PASSWORD") or DEFAULT_LOGIN_PASSWORD,
+    )
+
+
+def get_session_secret() -> bytes:
+    return (os.getenv("PM_SESSION_SECRET") or _FALLBACK_SESSION_SECRET).encode()

@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_chat_missing_api_key(monkeypatch) -> None:
+def test_chat_missing_api_key(monkeypatch, client) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     response = client.post("/api/chat", json={"message": "2+2"})
     assert response.status_code == 500
