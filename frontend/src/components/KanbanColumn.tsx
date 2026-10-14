@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import clsx from "clsx";
 import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -38,6 +39,33 @@ export const KanbanColumn = ({
   const overColumnId = over?.data?.current?.columnId as string | undefined;
   const isColumnOver = isOver || overColumnId === column.id;
 
+  // The title is edited locally and saved on blur or Enter, so the server gets one request
+  // per edit instead of one per keystroke. An empty title is not saved; it reverts.
+  const [draft, setDraft] = useState(column.title);
+  const [savedTitle, setSavedTitle] = useState(column.title);
+  if (savedTitle !== column.title) {
+    setSavedTitle(column.title);
+    setDraft(column.title);
+  }
+
+  const cancelled = useRef(false);
+
+  const commitTitle = () => {
+    if (cancelled.current) {
+      cancelled.current = false;
+      return;
+    }
+    const next = draft.trim();
+    if (!next) {
+      setDraft(column.title);
+      return;
+    }
+    setDraft(next);
+    if (next !== column.title) {
+      onRename(column.id, next);
+    }
+  };
+
   return (
     <section
       ref={setNodeRef}
@@ -54,8 +82,19 @@ export const KanbanColumn = ({
           aria-hidden
         />
         <input
-          value={column.title}
-          onChange={(event) => onRename(column.id, event.target.value)}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            } else if (event.key === "Escape") {
+              cancelled.current = true;
+              setDraft(column.title);
+              event.currentTarget.blur();
+            }
+          }}
+          maxLength={200}
           className="-mx-1 min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm font-semibold text-ink transition-colors hover:bg-surface/70 focus:bg-surface"
           aria-label="Column title"
         />
