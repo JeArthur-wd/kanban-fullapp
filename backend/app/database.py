@@ -1,21 +1,24 @@
 import sqlite3
-from typing import Generator, Iterable, Literal
+from typing import Iterable, Literal
 
 from app.config import DEFAULT_BOARD_TITLE, INITIAL_COLUMNS, get_db_path
 
 VALID_TABLES = {"cards", "columns"}
+BUSY_TIMEOUT_SECONDS = 10
 
 
 def connect_db() -> sqlite3.Connection:
     db_path = get_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 def init_db() -> None:
     conn = connect_db()
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -35,7 +38,7 @@ def init_db() -> None:
             title TEXT NOT NULL DEFAULT 'My Board',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             UNIQUE (user_id)
         )
         """
@@ -49,7 +52,7 @@ def init_db() -> None:
             position INTEGER NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (board_id) REFERENCES boards(id)
+            FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
         )
         """
     )
@@ -64,7 +67,7 @@ def init_db() -> None:
             archived INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (column_id) REFERENCES columns(id)
+            FOREIGN KEY (column_id) REFERENCES columns(id) ON DELETE CASCADE
         )
         """
     )
@@ -75,44 +78,30 @@ def init_db() -> None:
     conn.close()
 
 
-def get_db() -> Generator[sqlite3.Connection, None, None]:
-    conn = connect_db()
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
 def get_or_create_user(conn: sqlite3.Connection, username: str) -> int:
-    row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
-    if row:
-        return int(row["id"])
-    cursor = conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
+    conn.execute("INSERT INTO users (username) VALUES (?) ON CONFLICT(username) DO NOTHING", (username,))
     conn.commit()
-    return int(cursor.lastrowid)
+    row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    return int(row["id"])
 
 
 def get_or_create_board(conn: sqlite3.Connection, user_id: int) -> int:
-    row = conn.execute("SELECT id FROM boards WHERE user_id = ?", (user_id,)).fetchone()
-    if row:
-        return int(row["id"])
+    """Return the user's board id. A new board is created together with its seed columns."""
     cursor = conn.execute(
-        "INSERT INTO boards (user_id, title) VALUES (?, ?)",
+        "INSERT INTO boards (user_id, title) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING",
         (user_id, DEFAULT_BOARD_TITLE),
     )
+    created = cursor.rowcount == 1
+    board_id = int(
+        conn.execute("SELECT id FROM boards WHERE user_id = ?", (user_id,)).fetchone()["id"]
+    )
+    if created:
+        _seed_board(conn, board_id)
     conn.commit()
-    return int(cursor.lastrowid)
+    return board_id
 
 
-def ensure_seed_data(conn: sqlite3.Connection, user_id: int) -> int:
-    board_id = get_or_create_board(conn, user_id)
-    column_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM columns WHERE board_id = ?",
-        (board_id,),
-    ).fetchone()["count"]
-    if column_count:
-        return board_id
-
+def _seed_board(conn: sqlite3.Connection, board_id: int) -> None:
     for column_index, (column_title, cards) in enumerate(INITIAL_COLUMNS):
         column_cursor = conn.execute(
             "INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)",
@@ -124,12 +113,10 @@ def ensure_seed_data(conn: sqlite3.Connection, user_id: int) -> int:
                 "INSERT INTO cards (column_id, title, details, position) VALUES (?, ?, ?, ?)",
                 (column_id, title, details, card_index),
             )
-    conn.commit()
-    return board_id
 
 
 def fetch_board(conn: sqlite3.Connection, user_id: int) -> dict:
-    board_id = ensure_seed_data(conn, user_id)
+    board_id = get_or_create_board(conn, user_id)
     board_row = conn.execute(
         "SELECT id, title FROM boards WHERE id = ?",
         (board_id,),
