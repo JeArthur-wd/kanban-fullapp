@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import resolve_static_dir
 
@@ -44,16 +45,24 @@ def static_fallback(full_path: str):
     if not STATIC_DIR:
         return HTMLResponse("Not found", status_code=404)
 
-    requested_path = STATIC_DIR / full_path
+    # Resolve first so "..", absolute paths and symlinks cannot leave the static root.
+    root = STATIC_DIR.resolve()
+    try:
+        requested_path = (root / full_path).resolve()
+    except (OSError, ValueError):
+        return HTMLResponse("Not found", status_code=404)
+    if requested_path != root and not requested_path.is_relative_to(root):
+        return HTMLResponse("Not found", status_code=404)
+
     if requested_path.is_dir():
         index_path = requested_path / "index.html"
         if index_path.exists():
             return FileResponse(index_path)
 
-    if requested_path.exists():
+    if requested_path.is_file():
         return FileResponse(requested_path)
 
-    index_path = STATIC_DIR / "index.html"
+    index_path = root / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
 
@@ -62,3 +71,13 @@ def static_fallback(full_path: str):
 
 def get_static_dir() -> Path | None:
     return STATIC_DIR
+
+
+def mount_static_assets(app: FastAPI, static_dir: Path) -> None:
+    """Serve the exported frontend's hashed asset folders directly."""
+    next_assets = static_dir / "_next"
+    if next_assets.exists():
+        app.mount("/_next", StaticFiles(directory=next_assets), name="next-assets")
+    static_assets = static_dir / "static"
+    if static_assets.exists():
+        app.mount("/static", StaticFiles(directory=static_assets), name="static-assets")
