@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import { platform } from "os";
 
+export const STORAGE_STATE = "playwright/.auth/user.json";
+
 const getStartScript = () => {
   const p = platform();
   if (p === "win32") return "scripts/start-windows.ps1";
@@ -26,9 +28,12 @@ export default defineConfig({
     timeout: 120_000,
   },
   projects: [
+    // Signs in once and saves the cookie, so the suite does not hit the sign-in rate limit.
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+      dependencies: ["setup"],
     },
   ],
 });

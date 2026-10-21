@@ -2,12 +2,14 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const TEST_PREFIX = "E2E ";
 
+// The suite runs signed in as the demo user (see auth.setup.ts); tests that need to be signed
+// out say so with signedOut.
+const signedOut = { storageState: { cookies: [], origins: [] } };
+
 const login = async (page: Page) => {
   await page.goto("/");
-  await page.getByPlaceholder("user").fill("user");
-  await page.getByPlaceholder("password").fill("password");
-  await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await expect(page.locator('[data-testid^="column-"]').first()).toBeVisible();
 };
 
 const getColumnByTitle = (page: Page, title: string) =>
@@ -20,8 +22,11 @@ type ApiBoard = {
   cards: Record<string, { id: string; title: string }>;
 };
 
+// The demo user's first board, which the page opens when nothing else was remembered.
 const readBoard = async (page: Page): Promise<ApiBoard> => {
-  const response = await page.request.get("/api/board");
+  const boards = await page.request.get("/api/boards");
+  expect(boards.ok()).toBeTruthy();
+  const response = await page.request.get(`/api/boards/${(await boards.json())[0].id}`);
   expect(response.ok()).toBeTruthy();
   return response.json();
 };
@@ -60,20 +65,38 @@ test("loads the kanban board", async ({ page }) => {
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
 });
 
-test("rejects a wrong password", async ({ page }) => {
-  await page.goto("/");
-  await page.getByPlaceholder("user").fill("user");
-  await page.getByPlaceholder("password").fill("not-the-password");
-  await page.getByRole("button", { name: /sign in/i }).click();
-  // Next also renders an empty role="alert" route announcer, so target the form message.
-  await expect(page.locator("p[role=alert]")).toContainText("Incorrect username or password.");
-  await expect(page.getByText("Welcome back")).toBeVisible();
+test("unknown API paths are JSON 404s, not the app", async ({ request }) => {
+  const response = await request.get("/api/does-not-exist");
+  expect(response.status()).toBe(404);
+  expect(await response.json()).toEqual({ detail: "Not Found" });
 });
 
-test("the API is closed to anyone who has not signed in", async ({ request }) => {
-  expect((await request.get("/api/board")).status()).toBe(401);
-  expect((await request.get("/api/board", { headers: { "X-User": "user" } })).status()).toBe(401);
-  expect((await request.post("/api/chat", { data: { message: "hi" } })).status()).toBe(401);
+test.describe("signed out", () => {
+  test.use(signedOut);
+
+  test("rejects a wrong password", async ({ page }) => {
+    await page.goto("/");
+    await page.getByPlaceholder("user").fill("user");
+    await page.getByPlaceholder("password").fill("not-the-password");
+    await page.getByRole("button", { name: /sign in/i }).click();
+    // Next also renders an empty role="alert" route announcer, so target the form message.
+    await expect(page.locator("p[role=alert]")).toContainText("Incorrect username or password.");
+    await expect(page.getByText("Welcome back")).toBeVisible();
+  });
+
+  test("signs in with the form", async ({ page }) => {
+    await page.goto("/");
+    await page.getByPlaceholder("user").fill("user");
+    await page.getByPlaceholder("password").fill("password");
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await expect(page.locator('[data-testid^="column-"]').first()).toBeVisible();
+  });
+
+  test("the API is closed to anyone who has not signed in", async ({ request }) => {
+    expect((await request.get("/api/boards")).status()).toBe(401);
+    expect((await request.get("/api/boards", { headers: { "X-User": "user" } })).status()).toBe(401);
+    expect((await request.post("/api/boards/1/chat", { data: { message: "hi" } })).status()).toBe(401);
+  });
 });
 
 test("static files outside the site folder are not served", async ({ request }) => {
