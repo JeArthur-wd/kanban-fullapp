@@ -1,11 +1,29 @@
-import type { BoardData, Card, Column } from "@/lib/kanban";
+import type { BoardData, Card, Column, Priority } from "@/lib/kanban";
 import { toCardId, toColumnId } from "@/lib/kanban";
 
 type BoardResponse = {
-    board: { id: string; title: string };
+    board: { id: string; title: string; description?: string };
     columns: Array<Column & { position?: number } & { cardIds: string[] }>;
     cards: Record<string, Card>;
 };
+
+export type Session = {
+    id: string;
+    username: string;
+    displayName: string;
+    createdAt?: string;
+};
+
+export type BoardSummary = {
+    id: string;
+    title: string;
+    description: string;
+    createdAt?: string;
+    columnCount: number;
+    cardCount: number;
+};
+
+export type BoardTemplate = "basic" | "sample";
 
 type ApiOptions = {
     // The login and session calls report 401 themselves instead of ending the session.
@@ -114,19 +132,61 @@ export const toBoardData = (payload: BoardResponse): BoardData => {
     };
 };
 
+const send = (method: string, payload?: unknown): RequestInit => ({
+    method,
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+});
+
 export const login = (username: string, password: string) =>
-    apiFetch<{ username: string }>(
+    apiFetch<Session>(
         "/api/login",
-        { method: "POST", body: JSON.stringify({ username, password }) },
+        send("POST", { username, password }),
+        { handleUnauthorized: false }
+    );
+
+export const register = (username: string, password: string, displayName: string) =>
+    apiFetch<Session>(
+        "/api/register",
+        send("POST", { username, password, display_name: displayName }),
         { handleUnauthorized: false }
     );
 
 export const logout = () => apiFetch("/api/logout", { method: "POST" });
 
 export const fetchSession = () =>
-    apiFetch<{ username: string }>("/api/session", {}, { handleUnauthorized: false });
+    apiFetch<Session>("/api/session", {}, { handleUnauthorized: false });
 
-export const fetchBoard = () => apiFetch<BoardResponse>("/api/board");
+export const updateProfile = (displayName: string) =>
+    apiFetch<Session>("/api/me", send("PATCH", { display_name: displayName }));
+
+// A wrong current password is a 403, not a 401, so it does not end the session.
+export const changePassword = (currentPassword: string, newPassword: string) =>
+    apiFetch(
+        "/api/me/password",
+        send("POST", { current_password: currentPassword, new_password: newPassword })
+    );
+
+export const deleteAccount = (password: string) =>
+    apiFetch("/api/me", send("DELETE", { password }));
+
+export const listBoards = () => apiFetch<BoardSummary[]>("/api/boards");
+
+export const createBoard = (payload: {
+    title: string;
+    description?: string;
+    template?: BoardTemplate;
+}) => apiFetch<{ id: string }>("/api/boards", send("POST", payload));
+
+export const updateBoard = (boardId: string, payload: { title?: string; description?: string }) =>
+    apiFetch(`/api/boards/${boardId}`, send("PATCH", payload));
+
+export const deleteBoard = (boardId: string) =>
+    apiFetch(`/api/boards/${boardId}`, { method: "DELETE" });
+
+export const fetchBoard = (boardId: string) => apiFetch<BoardResponse>(`/api/boards/${boardId}`);
+
+export const createColumn = (boardId: string, payload: { title: string; position?: number }) =>
+    apiFetch<{ id: string }>(`/api/boards/${boardId}/columns`, send("POST", payload));
 
 export const updateColumn = (
     columnId: number,
@@ -141,6 +201,8 @@ export const createCard = (payload: {
     column_id: number;
     title: string;
     details: string;
+    priority?: Priority;
+    due_date?: string | null;
     position?: number;
 }) =>
     apiFetch<{ id: string }>("/api/cards", {
@@ -150,7 +212,14 @@ export const createCard = (payload: {
 
 export const updateCard = (
     cardId: number,
-    payload: { title?: string; details?: string; column_id?: number; position?: number }
+    payload: {
+        title?: string;
+        details?: string;
+        priority?: Priority;
+        due_date?: string | null;
+        column_id?: number;
+        position?: number;
+    }
 ) =>
     apiFetch(`/api/cards/${cardId}`, {
         method: "PATCH",
@@ -160,12 +229,11 @@ export const updateCard = (
 export const deleteCard = (cardId: number) =>
     apiFetch(`/api/cards/${cardId}`, { method: "DELETE" });
 
-export const sendChat = (payload: {
-    message: string;
-    history: ChatMessage[];
-    apply_updates: boolean;
-}) =>
-    apiFetch<ChatResponse>("/api/chat", {
-        method: "POST",
-        body: JSON.stringify(payload),
-    });
+export const sendChat = (
+    boardId: string,
+    payload: {
+        message: string;
+        history: ChatMessage[];
+        apply_updates: boolean;
+    }
+) => apiFetch<ChatResponse>(`/api/boards/${boardId}/chat`, send("POST", payload));

@@ -58,3 +58,30 @@ export const BoardMark = (props: SVGProps<SVGSVGElement>) => (
     <rect x="17.5" y="7" width="4.5" height="11.5" rx="1.5" fill="#fff" fillOpacity=".7" />
   </svg>
 );
+
+export const ChevronDownIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="m4 6 4 4 4-4" />
+  </svg>
+);
+
+export const CheckIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="m3.5 8.5 3 3 6-7" />
+  </svg>
+);
+
+export const SettingsIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="M2.5 4.5h6M11.5 4.5h2M2.5 11.5h2M7.5 11.5h6" />
+    <circle cx="10" cy="4.5" r="1.5" />
+    <circle cx="6" cy="11.5" r="1.5" />
+  </svg>
+);
+
+export const UserIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <circle cx="8" cy="5.5" r="2.5" />
+    <path d="M3 13.5c.7-2.3 2.6-3.5 5-3.5s4.3 1.2 5 3.5" />
+  </svg>
+);

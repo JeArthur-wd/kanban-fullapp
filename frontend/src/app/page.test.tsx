@@ -2,52 +2,14 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 import Home from "@/app/page";
-
-type Reply = { status?: number; body?: unknown };
-type Request = { body: unknown };
-type Handler = (request: Request) => Reply | Promise<Reply>;
-
-const board = (cards: Array<[string, string]>) => ({
-    board: { id: "1", title: "My Board" },
-    columns: [{ id: "1", title: "Backlog", position: 0, cardIds: cards.map(([id]) => id) }],
-    cards: Object.fromEntries(
-        cards.map(([id, title]) => [id, { id, title, details: "Details" }])
-    ),
-});
-
-const emptyBoard = board([]);
-
-// Routes fetch calls by "METHOD /path" and records each request body.
-const installServer = (routes: Record<string, Handler>) => {
-    const calls: Array<{ key: string; body: unknown }> = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-        const method = (init?.method ?? "GET").toUpperCase();
-        const key = `${method} ${String(input)}`;
-        const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-        calls.push({ key, body });
-        const handler = routes[key];
-        const reply = handler ? await handler({ body }) : { status: 404, body: { detail: "No route" } };
-        const status = reply.status ?? 200;
-        return {
-            ok: status < 400,
-            status,
-            json: async () => reply.body,
-            text: async () => JSON.stringify(reply.body ?? ""),
-        } as Response;
-    });
-    return {
-        calls,
-        count: (key: string) => calls.filter((call) => call.key === key).length,
-        bodies: (key: string) => calls.filter((call) => call.key === key).map((call) => call.body),
-    };
-};
-
-const signedOut: Record<string, Handler> = {
-    "GET /api/session": () => ({ status: 401, body: { detail: "Not signed in" } }),
-};
-const signedIn: Record<string, Handler> = {
-    "GET /api/session": () => ({ body: { username: "user" } }),
-};
+import {
+    board,
+    emptyBoard,
+    installServer,
+    signedIn,
+    signedOut,
+    type Reply,
+} from "@/test/fakeServer";
 
 const signIn = async () => {
     await userEvent.type(await screen.findByPlaceholderText("user"), "user");
@@ -57,6 +19,7 @@ const signIn = async () => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
 });
 
 describe("Home page: sign in", () => {
@@ -68,7 +31,7 @@ describe("Home page: sign in", () => {
     });
 
     it("skips the login screen when the server session is still valid", async () => {
-        installServer({ ...signedIn, "GET /api/board": () => ({ body: emptyBoard }) });
+        installServer({ ...signedIn, "GET /api/boards/1": () => ({ body: emptyBoard }) });
         render(<Home />);
         expect(await screen.findByText("Kanban Studio")).toBeInTheDocument();
         expect(screen.queryByText("Welcome back")).not.toBeInTheDocument();
@@ -78,7 +41,7 @@ describe("Home page: sign in", () => {
         const server = installServer({
             ...signedOut,
             "POST /api/login": () => ({ body: { username: "user" } }),
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
         });
         render(<Home />);
         await signIn();
@@ -114,7 +77,7 @@ describe("Home page: sign in", () => {
     it("logs out through the server", async () => {
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
             "POST /api/logout": () => ({ body: { status: "ok" } }),
         });
         render(<Home />);
@@ -127,7 +90,7 @@ describe("Home page: sign in", () => {
     it("returns to the login screen when the session ends mid-use", async () => {
         installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: board([["9", "Card"]]) }),
+            "GET /api/boards/1": () => ({ body: board([["9", "Card"]]) }),
             "DELETE /api/cards/9": () => ({ status: 401, body: { detail: "Not signed in" } }),
         });
         render(<Home />);
@@ -143,7 +106,7 @@ describe("Home page: board loading", () => {
         let attempts = 0;
         installServer({
             ...signedIn,
-            "GET /api/board": () => {
+            "GET /api/boards/1": () => {
                 attempts += 1;
                 return attempts === 1
                     ? { status: 500, body: { detail: "boom" } }
@@ -167,7 +130,7 @@ describe("Home page: board loading", () => {
         });
         installServer({
             ...signedIn,
-            "GET /api/board": () => {
+            "GET /api/boards/1": () => {
                 loads += 1;
                 if (loads === 1) return { body: board([["1", "First"], ["2", "Second"]]) };
                 if (loads === 2) return stale;
@@ -195,7 +158,7 @@ describe("Home page: board errors are shown", () => {
     it("tells the user when a card cannot be deleted, and restores it", async () => {
         installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: board([["9", "Keep me"]]) }),
+            "GET /api/boards/1": () => ({ body: board([["9", "Keep me"]]) }),
             "DELETE /api/cards/9": () => ({ status: 500, body: { detail: "boom" } }),
         });
         render(<Home />);
@@ -208,7 +171,7 @@ describe("Home page: board errors are shown", () => {
     it("tells the user when a column rename is rejected, and restores the title", async () => {
         installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
             "PATCH /api/columns/1": () => ({ status: 422, body: { detail: [] } }),
         });
         render(<Home />);
@@ -224,7 +187,7 @@ describe("Home page: board errors are shown", () => {
     it("tells the user when a card cannot be added", async () => {
         installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
             "POST /api/cards": () => ({ status: 500, body: { detail: "boom" } }),
         });
         render(<Home />);
@@ -240,7 +203,7 @@ describe("Home page: column titles", () => {
     it("saves a renamed column once, on blur, not on every keystroke", async () => {
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
             "PATCH /api/columns/1": () => ({ body: { status: "ok" } }),
         });
         render(<Home />);
@@ -257,7 +220,7 @@ describe("Home page: column titles", () => {
     it("saves on Enter", async () => {
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
             "PATCH /api/columns/1": () => ({ body: { status: "ok" } }),
         });
         render(<Home />);
@@ -270,7 +233,7 @@ describe("Home page: column titles", () => {
     it("never sends an empty title and puts the old one back", async () => {
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
             "PATCH /api/columns/1": () => ({ body: { status: "ok" } }),
         });
         render(<Home />);
@@ -285,7 +248,7 @@ describe("Home page: column titles", () => {
     it("Escape cancels an edit", async () => {
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
         });
         render(<Home />);
         const input = await screen.findByLabelText("Column title");
@@ -305,8 +268,8 @@ describe("Home page: chat", () => {
     it("applies chat updates to the board", async () => {
         installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
-            "POST /api/chat": () => ({
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
+            "POST /api/boards/1/chat": () => ({
                 body: {
                     response: "Created a card.",
                     actions: [{ type: "create_card" }],
@@ -324,8 +287,8 @@ describe("Home page: chat", () => {
     it("shows the server's explanation when the assistant fails", async () => {
         installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
-            "POST /api/chat": () => ({
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
+            "POST /api/boards/1/chat": () => ({
                 status: 429,
                 body: { detail: "The AI service is busy right now. Please try again in a moment." },
             }),
@@ -341,8 +304,8 @@ describe("Home page: chat", () => {
         let call = 0;
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
-            "POST /api/chat": () => {
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
+            "POST /api/boards/1/chat": () => {
                 call += 1;
                 return call === 1
                     ? { status: 502, body: { detail: "OpenRouter returned an error" } }
@@ -358,15 +321,15 @@ describe("Home page: chat", () => {
         await userEvent.click(screen.getByRole("button", { name: /send/i }));
         await screen.findByText("Fine.");
 
-        const bodies = server.bodies("POST /api/chat") as Array<{ history: unknown[] }>;
+        const bodies = server.bodies("POST /api/boards/1/chat") as Array<{ history: unknown[] }>;
         expect(bodies[1].history).toEqual([{ role: "user", content: "first" }]);
     });
 
     it("sends at most 20 past messages", async () => {
         const server = installServer({
             ...signedIn,
-            "GET /api/board": () => ({ body: emptyBoard }),
-            "POST /api/chat": () => ({ body: { response: "ok", actions: [], board: emptyBoard } }),
+            "GET /api/boards/1": () => ({ body: emptyBoard }),
+            "POST /api/boards/1/chat": () => ({ body: { response: "ok", actions: [], board: emptyBoard } }),
         });
         const input = await openChat();
         for (let index = 0; index < 13; index += 1) {
@@ -374,7 +337,7 @@ describe("Home page: chat", () => {
             await userEvent.click(screen.getByRole("button", { name: /send/i }));
             await waitFor(() => expect(within(document.body).getAllByText("ok")).toHaveLength(index + 1));
         }
-        const bodies = server.bodies("POST /api/chat") as Array<{ history: unknown[] }>;
+        const bodies = server.bodies("POST /api/boards/1/chat") as Array<{ history: unknown[] }>;
         expect(bodies[12].history).toHaveLength(20);
     }, 60000);
 });

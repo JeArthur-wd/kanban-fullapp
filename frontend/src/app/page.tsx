@@ -1,30 +1,35 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
+import { AccountDialog } from "@/components/AccountDialog";
+import { AppHeader } from "@/components/AppHeader";
+import { AuthScreen } from "@/components/AuthScreen";
+import { NewBoardDialog } from "@/components/BoardDialogs";
+import { BoardSwitcher } from "@/components/BoardSwitcher";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { BoardMark } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
+import { primaryButton } from "@/components/ui";
 import {
   ApiError,
+  createBoard,
   createCard,
+  deleteBoard,
   deleteCard,
   fetchBoard,
   fetchSession,
-  login,
+  listBoards,
   logout,
   sendChat,
   setUnauthorizedHandler,
   toBoardData,
+  updateBoard,
   updateCard,
   updateColumn,
+  type BoardSummary,
+  type BoardTemplate,
   type ChatMessage,
+  type Session,
 } from "@/lib/api";
 import { findCardLocation, fromCardId, fromColumnId, type BoardData } from "@/lib/kanban";
 
@@ -32,9 +37,24 @@ import { findCardLocation, fromCardId, fromColumnId, type BoardData } from "@/li
 const CHAT_HISTORY_LIMIT = 20;
 const CHAT_CONTENT_LIMIT = 8000;
 const BOARD_ERROR_MS = 6000;
+const LAST_BOARD_KEY = "kanban:lastBoard";
 
-const inputClass =
-  "mt-1.5 h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink transition-colors hover:border-line-strong focus:border-accent";
+// Remembering the last board is a convenience; storage can be unavailable.
+const readLastBoard = () => {
+  try {
+    return window.localStorage.getItem(LAST_BOARD_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const rememberBoard = (boardId: string) => {
+  try {
+    window.localStorage.setItem(LAST_BOARD_KEY, boardId);
+  } catch {
+    // Ignored: the first board is opened instead next time.
+  }
+};
 
 const Spinner = () => (
   <svg
@@ -48,32 +68,73 @@ const Spinner = () => (
   </svg>
 );
 
+const CenteredStatus = ({ title, detail }: { title: string; detail?: string }) => (
+  <main className="grid flex-1 place-items-center px-4 py-16">
+    <section className="text-center" role="status">
+      <Spinner />
+      <h2 className="mt-4 text-base font-semibold text-ink">{title}</h2>
+      {detail ? <p className="mt-1 text-sm text-muted">{detail}</p> : null}
+    </section>
+  </main>
+);
+
+const RetryPanel = ({ title, error, onRetry }: { title: string; error: string; onRetry: () => void }) => (
+  <main className="grid flex-1 place-items-center px-4 py-16">
+    <section className="text-center">
+      <h2 className="text-base font-semibold text-ink">{title}</h2>
+      <p role="alert" className="mt-1 text-sm text-danger">
+        {error}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 h-9 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+      >
+        Try again
+      </button>
+    </section>
+  </main>
+);
+
 export default function Home() {
-  const [board, setBoard] = useState<BoardData | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [boards, setBoards] = useState<BoardSummary[] | null>(null);
+  const [boardsError, setBoardsError] = useState<string | null>(null);
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
+  const [board, setBoard] = useState<BoardData | null>(null);
   const [boardError, setBoardError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatSending, setIsChatSending] = useState(false);
+  const [dialog, setDialog] = useState<"account" | "first-board" | null>(null);
+  // The board that requests are for. A ref, so callbacks made earlier see the current board.
+  const activeBoardRef = useRef<string | null>(null);
   // Only the newest board response may be applied; older ones are dropped.
   const refreshSeq = useRef(0);
 
   const resetSession = useCallback(() => {
     refreshSeq.current += 1;
-    setUsername(null);
+    activeBoardRef.current = null;
+    setSession(null);
+    setBoards(null);
+    setBoardsError(null);
+    setActiveBoardId(null);
     setBoard(null);
     setBoardError(null);
     setChatMessages([]);
     setChatError(null);
+    setDialog(null);
   }, []);
 
   const refreshBoard = useCallback(async () => {
+    const boardId = activeBoardRef.current;
+    if (!boardId) return;
     const seq = ++refreshSeq.current;
     setBoardError(null);
     try {
-      const payload = await fetchBoard();
+      const payload = await fetchBoard(boardId);
       if (seq === refreshSeq.current) {
         setBoard(toBoardData(payload));
       }
@@ -84,6 +145,49 @@ export default function Home() {
       }
     }
   }, []);
+
+  // Switch to a board (or to none). The chat belongs to the board, so it starts empty.
+  const openBoard = useCallback(
+    (boardId: string | null) => {
+      refreshSeq.current += 1;
+      activeBoardRef.current = boardId;
+      setActiveBoardId(boardId);
+      setBoard(null);
+      setBoardError(null);
+      setChatMessages([]);
+      setChatError(null);
+      if (boardId) {
+        rememberBoard(boardId);
+        refreshBoard();
+      }
+    },
+    [refreshBoard]
+  );
+
+  const loadBoards = useCallback(async () => {
+    setBoardsError(null);
+    try {
+      const list = await listBoards();
+      setBoards(list);
+      return list;
+    } catch (err) {
+      if (process.env.NODE_ENV === "development") console.error(err);
+      setBoardsError("Unable to load your boards from the server.");
+      return null;
+    }
+  }, []);
+
+  const startSession = useCallback(
+    async (next: Session) => {
+      setSession(next);
+      setNotice(null);
+      const list = await loadBoards();
+      if (!list) return;
+      const last = readLastBoard();
+      openBoard((list.find((item) => item.id === last) ?? list[0])?.id ?? null);
+    },
+    [loadBoards, openBoard]
+  );
 
   // Put the board back in sync with the server, then say what went wrong. The message is
   // set after the refresh because the refresh clears any earlier message.
@@ -96,22 +200,19 @@ export default function Home() {
     [refreshBoard]
   );
 
-  const handleBoardChange = useCallback(
-    (updater: SetStateAction<BoardData>) => {
-      setBoard((prev) => {
-        if (!prev) {
-          return prev;
-        }
-        return typeof updater === "function" ? updater(prev) : updater;
-      });
-    },
-    []
-  );
+  const handleBoardChange = useCallback((updater: SetStateAction<BoardData>) => {
+    setBoard((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return typeof updater === "function" ? updater(prev) : updater;
+    });
+  }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
       resetSession();
-      setError("Your session has ended. Please sign in again.");
+      setNotice("Your session has ended. Please sign in again.");
     });
     return () => setUnauthorizedHandler(null);
   }, [resetSession]);
@@ -119,10 +220,8 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     fetchSession()
-      .then((session) => {
-        if (cancelled) return;
-        setUsername(session.username);
-        refreshBoard();
+      .then((current) => {
+        if (!cancelled) startSession(current);
       })
       .catch(() => {})
       .finally(() => {
@@ -131,37 +230,13 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [refreshBoard]);
+  }, [startSession]);
 
   useEffect(() => {
     if (!boardError || !board) return;
     const timer = setTimeout(() => setBoardError(null), BOARD_ERROR_MS);
     return () => clearTimeout(timer);
   }, [boardError, board]);
-
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const enteredUsername = String(formData.get("username") || "").trim();
-    const enteredPassword = String(formData.get("password") || "");
-
-    try {
-      const session = await login(enteredUsername, enteredPassword);
-      setError(null);
-      form.reset();
-      setUsername(session.username);
-      refreshBoard();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setError("Incorrect username or password.");
-      } else if (err instanceof ApiError && err.detail) {
-        setError(err.detail);
-      } else {
-        setError("Unable to sign in right now. Please try again.");
-      }
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -170,7 +245,28 @@ export default function Home() {
       // The local state is cleared either way; an expired session needs no server call.
     }
     resetSession();
-    setError(null);
+    setNotice(null);
+  };
+
+  const handleCreateBoard = async (title: string, description: string, template: BoardTemplate) => {
+    const { id } = await createBoard({ title, description, template });
+    await loadBoards();
+    openBoard(id);
+  };
+
+  const handleUpdateBoard = async (boardId: string, title: string, description: string) => {
+    await updateBoard(boardId, { title, description });
+    setBoards((prev) =>
+      prev ? prev.map((item) => (item.id === boardId ? { ...item, title, description } : item)) : prev
+    );
+  };
+
+  const handleDeleteBoard = async (boardId: string) => {
+    await deleteBoard(boardId);
+    const list = await loadBoards();
+    if (boardId === activeBoardRef.current) {
+      openBoard(list?.[0]?.id ?? null);
+    }
   };
 
   const handleRenameColumn = async (columnId: string, title: string) => {
@@ -193,11 +289,7 @@ export default function Home() {
       return;
     }
     try {
-      await createCard({
-        column_id: columnIdNumber,
-        title,
-        details: details || "No details yet.",
-      });
+      await createCard({ column_id: columnIdNumber, title, details });
       refreshBoard();
     } catch (err) {
       await recoverFrom(err, "Unable to add the card.");
@@ -239,6 +331,8 @@ export default function Home() {
   };
 
   const handleSendChat = async (message: string) => {
+    const boardId = activeBoardRef.current;
+    if (!boardId) return;
     setChatError(null);
     setIsChatSending(true);
     const userMessage: ChatMessage = { role: "user", content: message };
@@ -249,22 +343,21 @@ export default function Home() {
     setChatMessages((prev) => [...prev, userMessage]);
 
     try {
-      const response = await sendChat({
+      const response = await sendChat(boardId, {
         message,
         history,
         apply_updates: true,
       });
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content: response.response,
-      };
-      setChatMessages((prev) => [...prev, assistantMessage]);
+      // The user may have switched boards while the assistant was answering.
+      if (boardId !== activeBoardRef.current) return;
+      setChatMessages((prev) => [...prev, { role: "assistant", content: response.response }]);
       if (response.board) {
         refreshSeq.current += 1;
         setBoard(toBoardData(response.board));
       }
     } catch (err) {
       if (process.env.NODE_ENV === "development") console.error(err);
+      if (boardId !== activeBoardRef.current) return;
       const text =
         err instanceof ApiError && err.detail
           ? err.detail
@@ -281,136 +374,96 @@ export default function Home() {
 
   if (!sessionChecked) {
     return (
-      <main className="grid min-h-screen place-items-center px-4">
-        <section className="text-center" role="status">
-          <Spinner />
-          <h1 className="mt-4 text-base font-semibold text-ink">Loading</h1>
-        </section>
-      </main>
+      <div className="flex min-h-screen flex-col">
+        <CenteredStatus title="Loading" />
+      </div>
     );
   }
 
-  if (!username) {
-    return (
-      <main className="grid min-h-screen place-items-center px-4 py-12">
-        <section className="w-full max-w-[400px] rounded-xl border border-line bg-surface p-8 shadow-panel">
-          <div className="flex items-center gap-2.5">
-            <BoardMark />
-            <span className="text-[15px] font-semibold tracking-tight text-ink">
-              Kanban Studio
-            </span>
-          </div>
-          <h1 className="mt-8 text-2xl font-semibold tracking-tight text-ink">
-            Welcome back
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Sign in to continue to your Kanban board. Use the demo credentials to explore the MVP.
-          </p>
-
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
-            <div>
-              <label htmlFor="username" className="text-[13px] font-medium text-ink">
-                Username
-              </label>
-              <input
-                id="username"
-                name="username"
-                placeholder="user"
-                aria-label="Username"
-                autoComplete="username"
-                className={inputClass}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="text-[13px] font-medium text-ink">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="password"
-                aria-label="Password"
-                autoComplete="current-password"
-                className={inputClass}
-                required
-              />
-            </div>
-            {error ? (
-              <p role="alert" className="text-[13px] font-medium text-danger">
-                {error}
-              </p>
-            ) : null}
-            <button
-              type="submit"
-              className="h-10 w-full rounded-lg bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-strong"
-            >
-              Sign in
-            </button>
-          </form>
-          <p className="mt-5 rounded-lg bg-ground px-3 py-2.5 text-[13px] text-muted">
-            Demo credentials: user / password
-          </p>
-        </section>
-      </main>
-    );
+  if (!session) {
+    return <AuthScreen onSignedIn={startSession} notice={notice} />;
   }
 
-  if (!board) {
-    if (boardError) {
+  const renderContent = () => {
+    if (!boards) {
+      return boardsError ? (
+        <RetryPanel title="Could not load your boards" error={boardsError} onRetry={() => startSession(session)} />
+      ) : (
+        <CenteredStatus title="Loading your boards" />
+      );
+    }
+    if (boards.length === 0) {
       return (
-        <main className="grid min-h-screen place-items-center px-4">
-          <section className="text-center">
-            <h1 className="text-base font-semibold text-ink">Could not load your board</h1>
-            <p role="alert" className="mt-1 text-sm text-danger">
-              {boardError}
+        <main className="grid flex-1 place-items-center px-4 py-16">
+          <section className="max-w-sm text-center">
+            <h2 className="text-base font-semibold text-ink">No boards yet</h2>
+            <p className="mt-1 text-sm text-muted">
+              Create a board to start planning work with your columns and cards.
             </p>
             <button
               type="button"
-              onClick={refreshBoard}
-              className="mt-4 h-9 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
+              onClick={() => setDialog("first-board")}
+              className={`${primaryButton} mt-4 inline-flex items-center gap-1.5`}
             >
-              Try again
+              <PlusIcon width={14} height={14} />
+              Create a board
             </button>
           </section>
         </main>
       );
     }
+    if (!board) {
+      return boardError ? (
+        <RetryPanel title="Could not load your board" error={boardError} onRetry={refreshBoard} />
+      ) : (
+        <CenteredStatus
+          title="Loading your board"
+          detail="Fetching the latest updates from the server."
+        />
+      );
+    }
     return (
-      <main className="grid min-h-screen place-items-center px-4">
-        <section className="text-center" role="status">
-          <Spinner />
-          <h1 className="mt-4 text-base font-semibold text-ink">Loading your board</h1>
-          <p className="mt-1 text-sm text-muted">
-            Fetching the latest updates from the server.
-          </p>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <>
       <KanbanBoard
         board={board}
         onBoardChange={handleBoardChange}
-        onLogout={handleLogout}
-        username={username}
         onRenameColumn={handleRenameColumn}
         onAddCard={handleAddCard}
         onDeleteCard={handleDeleteCard}
         onMoveCard={handleMoveCard}
-        sidebar={(
+        sidebar={
           <ChatSidebar
             messages={chatMessages}
             onSend={handleSendChat}
             isSending={isChatSending}
             error={chatError}
           />
-        )}
+        }
       />
-      {boardError ? (
+    );
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <AppHeader
+        boardControls={
+          boards && boards.length > 0 ? (
+            <BoardSwitcher
+              boards={boards}
+              activeBoardId={activeBoardId}
+              onSelect={openBoard}
+              onCreate={handleCreateBoard}
+              onUpdate={handleUpdateBoard}
+              onDelete={handleDeleteBoard}
+              onOpen={loadBoards}
+            />
+          ) : null
+        }
+        accountLabel={session.displayName || session.username}
+        onOpenAccount={() => setDialog("account")}
+        onLogout={handleLogout}
+      />
+      {renderContent()}
+      {board && boardError ? (
         <div
           role="alert"
           className="fixed bottom-4 left-1/2 z-30 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-lg border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger shadow-lift"
@@ -418,6 +471,20 @@ export default function Home() {
           {boardError}
         </div>
       ) : null}
-    </>
+      {dialog === "account" ? (
+        <AccountDialog
+          session={session}
+          onSessionChange={setSession}
+          onAccountDeleted={() => {
+            resetSession();
+            setNotice("Your account has been deleted.");
+          }}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === "first-board" ? (
+        <NewBoardDialog onCreate={handleCreateBoard} onClose={() => setDialog(null)} />
+      ) : null}
+    </div>
   );
 }

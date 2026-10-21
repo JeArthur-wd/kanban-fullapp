@@ -19,14 +19,11 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { BoardMark, LogOutIcon } from "@/components/icons";
 import { createId, moveCard, type BoardData, type Column } from "@/lib/kanban";
 
 type KanbanBoardProps = {
   board: BoardData;
   onBoardChange: React.Dispatch<React.SetStateAction<BoardData>>;
-  onLogout?: () => void;
-  username?: string;
   onRenameColumn?: (columnId: string, title: string) => void;
   onAddCard?: (columnId: string, title: string, details: string) => void;
   onDeleteCard?: (columnId: string, cardId: string) => void;
@@ -37,8 +34,6 @@ type KanbanBoardProps = {
 export const KanbanBoard = ({
   board,
   onBoardChange,
-  onLogout,
-  username,
   onRenameColumn,
   onAddCard,
   onDeleteCard,
@@ -187,68 +182,45 @@ export const KanbanBoard = ({
   const activeCard = activeCardId ? board.cards[activeCardId] : null;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6">
-        <BoardMark />
-        <h1 className="text-[15px] font-semibold tracking-tight text-ink">
-          Kanban Studio
-        </h1>
-        <div className="flex-1" />
-        {username ? (
-          <span className="hidden text-[13px] text-muted sm:inline">{username}</span>
-        ) : null}
-        {onLogout ? (
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-line px-3 text-[13px] font-medium text-ink transition-colors hover:border-line-strong hover:bg-ground"
-          >
-            <LogOutIcon width={14} height={14} />
-            Log out
-          </button>
-        ) : null}
-      </header>
-
-      <main
-        className={
-          sidebar
-            ? "grid flex-1 grid-cols-[minmax(0,1fr)] gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px] 2xl:p-6"
-            : "flex-1 p-4 sm:p-6"
-        }
+    <main
+      className={
+        sidebar
+          ? "grid flex-1 grid-cols-[minmax(0,1fr)] gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px] 2xl:p-6"
+          : "flex-1 p-4 sm:p-6"
+      }
+    >
+      <DndContext
+        sensors={sensors}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        collisionDetection={collisionDetection}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
       >
-        <DndContext
-          sensors={sensors}
-          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-          collisionDetection={collisionDetection}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          <section className="relative grid min-w-0 auto-cols-[minmax(16rem,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-5 lg:min-h-[calc(100dvh-6rem)]">
-            {board.columns.map((column, index) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                index={index}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </section>
-          <DragOverlay>
-            {activeCard ? (
-              <div className="w-[272px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-        {sidebar ? (
-          <div className="lg:sticky lg:top-[4.5rem] lg:self-start">{sidebar}</div>
-        ) : null}
-      </main>
-    </div>
+        <section className="relative grid min-w-0 auto-cols-[minmax(16rem,1fr)] grid-flow-col gap-3 xl:auto-cols-[minmax(10.5rem,1fr)] overflow-x-auto pb-2 lg:min-h-[calc(100dvh-6rem)]">
+          {board.columns.map((column, index) => (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              cards={column.cardIds.map((cardId) => board.cards[cardId])}
+              index={index}
+              onRename={handleRenameColumn}
+              onAddCard={handleAddCard}
+              onDeleteCard={handleDeleteCard}
+            />
+          ))}
+        </section>
+        <DragOverlay>
+          {activeCard ? (
+            <div className="w-[272px]">
+              <KanbanCardPreview card={activeCard} />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+      {sidebar ? (
+        <div className="lg:sticky lg:top-[4.5rem] lg:self-start">{sidebar}</div>
+      ) : null}
+    </main>
   );
 };
