@@ -220,7 +220,16 @@ test("moves a card with the keyboard", async ({ page }) => {
   await expect(first).toBeVisible();
   await first.focus();
   await page.keyboard.press("Space");
-  await page.keyboard.press("ArrowDown");
+  // dnd-kit measures the drop targets after the drag starts; an arrow key pressed before
+  // that does nothing. Press again, as a person would, until the preview has moved down.
+  const preview = page.getByTestId("drag-overlay");
+  await expect(preview).toBeVisible();
+  const startY = (await preview.boundingBox())?.y ?? 0;
+  await expect(async () => {
+    if (((await preview.boundingBox())?.y ?? 0) > startY + 1) return;
+    await page.keyboard.press("ArrowDown");
+    throw new Error("The drag preview has not moved down yet.");
+  }).toPass({ intervals: [250, 500, 1000] });
   await page.keyboard.press("Space");
 
   const expected = [`${TEST_PREFIX}second`, `${TEST_PREFIX}first`];
