@@ -256,6 +256,10 @@ Increment 1 notes
 - New cards no longer get the "No details yet." placeholder (review L6).
 - E2E was run against local uvicorn (Docker Desktop was not running): 15 Playwright tests and the live backend tests (8 passed, the OpenRouter one skipped). Backend 120 tests, 98% coverage; frontend 51 unit tests, 91% statements.
 
+CI (added after increment 1)
+- [x] GitHub Actions: backend, frontend, e2e against the Docker image (first real run of the image with this code), gated Fly deploy.
+- [x] Found on CI: plain `pytest` could not import `app` (added `backend/pytest.ini`); keyboard drags could drop a card in the next column because the drag overlay was 272px wide on ~160px columns (review L3, fixed, with a test that fails on the old width); drag tests reloaded before the move was saved.
+
 Increment 2: card and column editing
 - [ ] Card detail dialog: edit title, details, priority, due date; archive and delete.
 - [ ] Add and delete columns in the UI.
