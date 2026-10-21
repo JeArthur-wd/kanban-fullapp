@@ -4,9 +4,13 @@
 
 Copy `.env.example` to `.env` in the repo root and set `OPENROUTER_API_KEY`. The start scripts require this file. Without a valid key the app runs, but AI chat returns an error.
 
-## Signing in
+## Accounts
 
-The login is checked on the server and kept in a signed cookie. The default account is `user` / `password`; set `PM_LOGIN_USER` and `PM_LOGIN_PASSWORD` to change it. Set `PM_SESSION_SECRET` to a long random string so sessions survive a restart (on Fly: `fly secrets set PM_SESSION_SECRET=...`). Without it, everyone is signed out whenever the server restarts.
+Anyone can create an account on the sign-in screen (set `PM_ALLOW_SIGNUP=false` to turn that off). Passwords are stored as scrypt hashes and the session is kept in a signed cookie. Each account can have any number of boards.
+
+A demo account, `user` / `password`, is created at startup; set `PM_LOGIN_USER` and `PM_LOGIN_PASSWORD` to change it. That password is only applied while the account has none, so a password changed in the app is kept. Set `PM_SESSION_SECRET` to a long random string so sessions survive a restart (on Fly: `fly secrets set PM_SESSION_SECRET=...`). Without it, everyone is signed out whenever the server restarts.
+
+The database schema is upgraded automatically at startup (`PRAGMA user_version`); existing boards and cards are kept.
 
 ## Local run (Docker)
 
@@ -22,9 +26,10 @@ The backend will be available at http://localhost:8000
 - Linux: scripts/stop-linux.sh
 - Windows: scripts/stop-windows.ps1
 
-## Integration tests
+## Tests
 
-Set PM_BASE_URL to the running backend URL (for example http://localhost:8000) before running integration tests.
+- Backend: `cd backend && pytest`. Live tests need a running server: `PM_BASE_URL=http://localhost:8000 pytest tests/test_integration.py`.
+- Frontend: `cd frontend && npm run test:unit`, and `npm run test:e2e` against a server on port 8000 (Playwright starts the Docker app if nothing is running there).
 
 ## Deploy (Fly.io)
 

@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Project Management MVP web app with a Kanban board and AI chat assistant. Users sign in, view/manage a Kanban board with drag-and-drop, and interact with an AI that can create/edit/move/delete cards.
+A project management web app with Kanban boards and an AI chat assistant. Users sign up or sign in, keep any number of boards, manage them with drag-and-drop, and interact with an AI that can create/edit/move/delete cards on the open board.
 
 **Stack:** Next.js 16 frontend (React 19, TypeScript, Tailwind v4, @dnd-kit), statically exported and served by a Python FastAPI backend, SQLite database, all packaged in one Docker image. AI via OpenRouter (default model `openai/gpt-oss-120b`).
 
-**MVP constraints:** One login (`user`/`password` by default, checked on the server), one board per user, fixed (renamable) columns. The DB schema supports multiple users.
+**Accounts and boards:** accounts live in the database (scrypt hashes); a demo account (`user`/`password` by default) is created at startup. Each user has many boards. `docs/PLAN.md` Part 11 lists what is done and what comes next.
 
 ## Commands
 
@@ -35,10 +35,10 @@ npm run build         # Static export to frontend/out
 npm run lint          # ESLint
 npm run test:unit     # Vitest (jsdom), src/**/*.test.{ts,tsx}
 npx vitest run src/lib/kanban.test.ts   # Single test file
-npm run test:e2e      # Playwright (tests/kanban.spec.ts)
+npm run test:e2e      # Playwright (tests/*.spec.ts)
 npm run test:all      # Unit + e2e
 ```
-Playwright targets `http://127.0.0.1:8000` and runs the platform start script as its web server, with `reuseExistingServer: true`. If the container is already running it will test that build, not your working tree.
+Playwright targets `http://127.0.0.1:8000` and runs the platform start script as its web server, with `reuseExistingServer: true`. If the container is already running it will test that build, not your working tree. A `setup` project signs in once (`tests/auth.setup.ts`) and the suite reuses that cookie; `tests/accounts.spec.ts` signs up throwaway accounts instead. Without Docker, run uvicorn on port 8000 with `PM_STATIC_DIR=frontend/out` and a scratch `PM_DB_PATH` after `npm run build`.
 
 ### Backend (from `backend/`)
 Tests import `app.*`, so run pytest from `backend/`.
@@ -49,27 +49,27 @@ pytest -k "test_name"            # Single test
 pytest --cov=app                 # Coverage
 PM_BASE_URL=http://127.0.0.1:8000 pytest tests/test_integration.py   # Live tests against a running container
 ```
-`test_integration.py` skips unless `PM_BASE_URL` is set; the live OpenRouter test also needs `OPENROUTER_API_KEY`. `docs/PLAN.md` runs these from the repo root with `PYTHONPATH=<repo root> pytest backend`.
+`test_integration.py` skips unless `PM_BASE_URL` is set; the live OpenRouter test also needs `OPENROUTER_API_KEY`. Run them from `backend/` (the repo root on `PYTHONPATH` is not enough: tests import `app`).
 
 ## Architecture
 
 **Backend (`backend/app/`):**
-- `main.py` - `create_app()` factory (lifespan runs `init_db()`, mounts `_next` and `static` from the exported frontend, includes the routers) and the module-level `app` that uvicorn runs. No endpoints live here; `routes/health.py` has `/health` and `/api/hello`.
-- `routes/auth.py` - `POST /api/login`, `POST /api/logout`, `GET /api/session`. `routes/board.py` - `GET /api/board`, plus POST/PATCH/DELETE for `/api/columns` and `/api/cards`. `routes/chat.py` - `POST /api/chat`. `routes/static.py` - serves the exported frontend at `/` with a catch-all fallback (registered last; resolves paths and refuses anything outside the static root).
-- `board_ops.py` - the one place that creates, moves and deletes columns and cards (ordering, ownership checks). Both the REST routes and the AI actions call it; do not copy ordering code elsewhere.
-- `database.py` - raw `sqlite3` (no ORM): schema, foreign keys on, WAL, seeding (`config.INITIAL_COLUMNS`, done when a board is first created), `fetch_board`, and `resequence_positions`. `dependencies.py` - `get_db` (per-request connection) and `get_username` (reads the session cookie, 401 if missing).
-- `auth.py` - HMAC-signed session cookie. `ratelimit.py` - small in-memory limiter used for login and chat.
-- `ai/` - the AI chat pieces: `client.py` (OpenRouter call and upstream error mapping), `prompts.py`, `parsing.py` (model text to validated output), `actions.py` (`apply_actions`, via `board_ops`). `models/` - Pydantic models: `board.py` (REST requests) and `chat.py` (chat request/response, AI actions). Both packages re-export their public names, so `from app.ai import ...` and `from app.models import ...` work.
+- `main.py` - `create_app()` factory (lifespan runs `init_db()` and `ensure_demo_account()`, mounts `_next` and `static` from the exported frontend, includes the routers) and the module-level `app` that uvicorn runs. No endpoints live here; `routes/health.py` has `/health` and `/api/hello`.
+- `routes/auth.py` - `POST /api/login`, `POST /api/register`, `POST /api/logout`, `GET /api/session`. `routes/account.py` - `GET/PATCH/DELETE /api/me`, `POST /api/me/password`. `routes/board.py` - `GET/POST /api/boards`, `GET/PATCH/DELETE /api/boards/{id}`, `POST /api/boards/{id}/columns`, PATCH/DELETE `/api/columns/{id}`, POST `/api/cards`, PATCH/DELETE `/api/cards/{id}`. `routes/chat.py` - `POST /api/boards/{id}/chat`. `routes/static.py` - serves the exported frontend at `/` with a catch-all fallback (registered last; resolves paths and refuses anything outside the static root).
+- `board_ops.py` - the one place that creates, moves and deletes boards, columns and cards, and that decides who may use a board (`require_board`, `board_for_column`, `board_for_card`). Both the REST routes and the AI actions call it; do not copy ordering or access checks elsewhere.
+- `database.py` - raw `sqlite3` (no ORM): migrations (`MIGRATIONS`, tracked in `PRAGMA user_version`, each in one transaction; add a function to the list to change the schema), foreign keys on, WAL, `fetch_board`, and `resequence_positions`. `dependencies.py` - `get_db` (per-request connection, `check_same_thread=False` because FastAPI may use it from several threadpool threads) and `get_current_user` / `get_user_id` (session cookie to user, 401 if missing or stale).
+- `accounts.py` - create user (with a sample board), demo account, profile, password, delete. `auth.py` - scrypt passwords and the HMAC-signed session cookie. `ratelimit.py` - small in-memory limiter for failed sign-ins, sign-ups and chat.
+- `ai/` - the AI chat pieces: `client.py` (OpenRouter call and upstream error mapping), `prompts.py`, `parsing.py` (model text to validated output), `actions.py` (`apply_actions`, via `board_ops`). `models/` - Pydantic models: `account.py` (sign-in, sign-up, settings), `board.py` (REST requests) and `chat.py` (chat request/response, AI actions). Both packages re-export their public names, so `from app.ai import ...` and `from app.models import ...` work.
 - `config.py` - env config. Paths: `PM_DB_PATH` (default `backend/data/pm.db`), `PM_STATIC_DIR` (default `frontend/out`). Model: `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_TEMPERATURE`.
 
-**Auth.** `POST /api/login` checks the credentials on the server (`PM_LOGIN_USER` / `PM_LOGIN_PASSWORD`, default `user` / `password`) and sets a signed, HTTP-only, SameSite=Lax session cookie (`pm_session`, 7 days). Every other `/api` route needs it (401 otherwise); the `X-User` header is no longer read. Set `PM_SESSION_SECRET` (a Fly secret in production) so sessions survive restarts; without it a random key is made per process. The user and a seeded board are created on first use. Every query is scoped by that user's board. Limits: `/api/login` 10 per minute per client, `/api/chat` 20 per minute per user, chat message 4000 characters, history 20 items.
+**Auth.** `POST /api/login` checks the password hash and sets a signed, HTTP-only, SameSite=Lax session cookie (`pm_session`, 7 days) holding the user id and the user's `session_epoch`. A password change bumps the epoch, which ends other sessions; deleting the user ends all of them (user ids are AUTOINCREMENT, never reused). Every other `/api` route needs the cookie (401 otherwise). Set `PM_SESSION_SECRET` (a Fly secret in production) so sessions survive restarts. The demo account comes from `PM_LOGIN_USER` / `PM_LOGIN_PASSWORD` and gets that password only while it has none. `PM_ALLOW_SIGNUP=false` turns sign-up off. Limits: 10 failed sign-ins and 10 sign-ups per minute per client (`PM_LOGIN_RATE_LIMIT`; `Fly-Client-IP` is trusted only when `FLY_APP_NAME` is set), `/api/boards/{id}/chat` 20 per minute per user, chat message 4000 characters, history 20 items. Unknown `/api/...` paths are JSON 404s.
 
-**AI chat flow (`/api/chat`):** load the user's board, send board JSON + history + message to the model, parse the reply as structured JSON (`reply` + `actions`; may be wrapped in prose), apply actions (`create_card`, `update_card`, `move_card`, `delete_card`) when `apply_updates` is true, and return the reply plus the refreshed board. Unparseable or schema-invalid model output returns 502; a missing API key returns 500. Schemas are documented in `docs/ai-structured-output.json` and `docs/kanban-schema.json`.
+**AI chat flow (`/api/boards/{id}/chat`):** check the user may use the board, load it, send board JSON + history + message to the model, parse the reply as structured JSON (`reply` + `actions`; may be wrapped in prose), apply actions (`create_card`, `update_card`, `move_card`, `delete_card`) when `apply_updates` is true, and return the reply plus the refreshed board. Unparseable or schema-invalid model output returns 502; a missing API key returns 500. Schemas are documented in `docs/ai-structured-output.json` and `docs/kanban-schema.json`.
 
 **Frontend (`frontend/src/`):**
-- `app/page.tsx` - login gate and board page.
-- `components/KanbanBoard.tsx` - board state owner, drag-and-drop handling, optimistic updates, background re-fetch after drop/add/delete (the full-screen loading view appears only on the initial load). `ChatSidebar.tsx` - AI chat UI.
-- `lib/api.ts` - API client (30s timeout, cookie session, `ApiError` carries the server's `detail`, a 401 anywhere returns the user to the login screen). `lib/kanban.ts` - types and ID helpers.
+- `app/page.tsx` - orchestrates session, board list and the open board (the API calls for board changes go through it; the last open board is remembered in localStorage). `components/AuthScreen.tsx` - sign in / create account. `AppHeader.tsx`, `BoardSwitcher.tsx` + `BoardDialogs.tsx` (new board, board settings and delete), `AccountDialog.tsx` (name, password, delete account), `Dialog.tsx` (modal shell), `ui.ts` (shared class names).
+- `components/KanbanBoard.tsx` - drag-and-drop handling and optimistic updates for the open board; the page re-fetches it in the background after drop/add/delete (the loading view appears only while a board is first opened). `ChatSidebar.tsx` - AI chat UI; the chat starts fresh for each board.
+- `lib/api.ts` - API client (30s timeout, cookie session, `ApiError` carries the server's `detail`, a 401 anywhere returns the user to the login screen). `lib/kanban.ts` - types and ID helpers. Page tests share a fake API in `src/test/fakeServer.ts`.
 
 **ID prefixing:** the frontend prefixes backend numeric IDs with `col-` and `card-` for drag-and-drop stability and strips them before API calls (`toCardId`/`toColumnId` in `lib/kanban.ts`).
 

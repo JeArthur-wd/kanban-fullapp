@@ -2,7 +2,7 @@
 
 This plan is the single source of truth for the MVP. Each part includes a checklist, tests, and success criteria. The project should target roughly 80% unit test coverage when it is sensible and adds value, but quality and meaningful coverage come first; we should not add unnecessary tests only to chase a percentage.
 
-## Part 1: Plan (current)
+## Part 1: Plan
 
 Checklist
 - [x] Review root AGENTS.md and existing documentation.
@@ -150,8 +150,8 @@ Testing notes (added after Part 8)
 	- docker run -d --name pm-app --env-file .env -p 8000:8000 pm-app
 - Wait for readiness via /health before tests:
 	- curl -sf http://127.0.0.1:8000/health
-- Backend tests require repo root on PYTHONPATH:
-	- PM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=/absolute/path/to/repo pytest backend
+- Backend tests run from `backend/` (they import `app`):
+	- cd backend && PM_BASE_URL=http://127.0.0.1:8000 pytest
 - Frontend tests:
 	- npm run test:all (runs unit + Playwright). Playwright uses the backend-served app at 8000.
 - Stop the container when done:
@@ -231,3 +231,47 @@ Structure: `main.py` is now a small `create_app()` factory (endpoints moved to `
 Not done (Low items in the review): untracking `frontend/test-results`, pinning Python requirements, CI, migrations framework, and splitting `page.tsx`.
 
 Deployment note: set `PM_SESSION_SECRET` (and a new `PM_LOGIN_PASSWORD`) as Fly secrets before the next deploy. Without `PM_SESSION_SECRET`, sessions end whenever the machine restarts.
+
+## Part 11: Comprehensive project management (multi-iteration)
+
+Goal: turn the single-board MVP into a multi-user, multi-board project management app, with strong
+unit and integration tests at every step. Work is split into increments; each one leaves the app
+working and the suites green. Nothing is committed until the user asks; the working tree holds the increments. `docs/code_review.md` (2026-10-20) findings
+are folded in where they touch the same code.
+
+Increment 1: accounts, multiple boards, migrations
+- [x] Migration framework on `PRAGMA user_version`; migration 2 removes `UNIQUE(user_id)` from boards and adds board description, card priority and due date, user display name and session epoch.
+- [x] Accounts stored in the database with scrypt password hashes: sign up, sign in, profile (display name), change password (ends other sessions), delete account. The demo account (`PM_LOGIN_USER`/`PM_LOGIN_PASSWORD`) is created at startup.
+- [x] Session cookie carries the user id and session epoch; a deleted user or changed password ends the session.
+- [x] Boards API: list, create (seeded or blank), read, rename/describe, delete. Columns are created on a board; cards and columns are checked against boards the user can access.
+- [x] Chat is scoped to a board (`POST /api/boards/{id}/chat`).
+- [x] Review fixes: H1 (connections usable across threads + concurrency test), M1 (trust `Fly-Client-IP` only behind Fly, prune limiter keys), M2 (Playwright signs in once), L1 (unknown `/api` paths are JSON 404), L5 (untrack `test-results`).
+- [x] Frontend: sign-up screen, board switcher (create, rename, delete), account settings dialog.
+
+Increment 1 notes
+- Found while writing tests: SQLite reuses the highest INTEGER PRIMARY KEY after a delete, so a deleted account's cookie would have worked for the next account created. User ids are now AUTOINCREMENT, and a test replays the old cookie.
+- Sign-in now counts failed attempts only (10 per minute per client); sign-up has its own limit. Consecutive Playwright runs no longer hit 429 (3 back-to-back runs, 15/15 each).
+- The H1 regression test drives the app concurrently on one event loop (`httpx.ASGITransport`); TestClient runs requests one at a time and did not reproduce the bug. Confirmed it fails with `check_same_thread=True`.
+- Board columns now flow horizontally for any count (they were a fixed 5-column grid on wide screens).
+- New cards no longer get the "No details yet." placeholder (review L6).
+- E2E was run against local uvicorn (Docker Desktop was not running): 15 Playwright tests and the live backend tests (8 passed, the OpenRouter one skipped). Backend 120 tests, 98% coverage; frontend 51 unit tests, 91% statements.
+
+Increment 2: card and column editing
+- [ ] Card detail dialog: edit title, details, priority, due date; archive and delete.
+- [ ] Add and delete columns in the UI.
+- [ ] Priority and due date shown on cards (overdue highlighted).
+- [ ] Labels per board, assign to cards.
+
+Increment 3: collaboration
+- [ ] Board members with roles (owner, editor, viewer); invite by username; viewers are read-only (API enforced).
+- [ ] Card assignee chosen from board members.
+
+Increment 4: finding and tracking work
+- [ ] Search and filter cards (text, priority, label, assignee, due).
+- [ ] Activity log per board.
+- [ ] Board overview stats (cards per column, overdue, by priority).
+
+Increment 5: AI and end-to-end
+- [ ] AI actions for the new fields (priority, due date, labels) and columns.
+- [ ] Playwright coverage for every new flow against the Docker image.
+- [ ] Docs (AGENTS.md files, README, schema JSON) brought up to date.

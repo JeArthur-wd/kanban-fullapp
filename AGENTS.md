@@ -17,6 +17,8 @@ For the MVP, there will only be 1 Kanban board per signed in user.
 
 For the MVP, this will run locally (in a docker container)
 
+Beyond the MVP: Part 11 of docs/PLAN.md lifts the one-login and one-board limits (accounts with sign-up, many boards per user) and tracks the further features.
+
 ## Technical Decisions
 
 - NextJS frontend
