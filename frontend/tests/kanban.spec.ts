@@ -156,6 +156,13 @@ test("renames a column once and keeps the name after a reload", async ({ page })
   await expect(page.getByLabel("Column title").last()).toHaveValue("Done");
 });
 
+// The board updates before the move is saved, so tests wait for the save before reloading;
+// a reload while the request is in flight cancels it.
+const cardSaved = (page: Page) =>
+  page.waitForResponse(
+    (response) => response.request().method() === "PATCH" && response.url().includes("/api/cards/")
+  );
+
 const dragCard = async (page: Page, card: Locator, target: Locator, targetY: number) => {
   const cardBox = await card.boundingBox();
   const targetBox = await target.boundingBox();
@@ -178,7 +185,9 @@ test("moves a card between columns", async ({ page }) => {
   await expect(card).toBeVisible();
   const columnBox = await targetColumn.boundingBox();
   if (!columnBox) throw new Error("Unable to resolve drag coordinates.");
+  const saved = cardSaved(page);
   await dragCard(page, card, targetColumn, columnBox.y + 120);
+  expect((await saved).ok()).toBeTruthy();
 
   await expect(targetColumn.getByText(`${TEST_PREFIX}cross-column`)).toBeVisible();
   // The move is saved, not just drawn.
@@ -199,7 +208,9 @@ test("moves a card down within its own column and keeps it there", async ({ page
   await expect(three).toBeVisible();
   const threeBox = await three.boundingBox();
   if (!threeBox) throw new Error("Unable to resolve drag coordinates.");
+  const saved = cardSaved(page);
   await dragCard(page, one, three, threeBox.y + threeBox.height - 4);
+  expect((await saved).ok()).toBeTruthy();
 
   const expected = [`${TEST_PREFIX}two`, `${TEST_PREFIX}three`, `${TEST_PREFIX}one`];
   await expect.poll(async () => (await cardTitles(column)).filter((t) => t.startsWith(TEST_PREFIX))).toEqual(expected);
@@ -220,12 +231,41 @@ test("moves a card with the keyboard", async ({ page }) => {
   await expect(first).toBeVisible();
   await first.focus();
   await page.keyboard.press("Space");
-  await page.keyboard.press("ArrowDown");
+  // dnd-kit measures the drop targets after the drag starts; an arrow key pressed before
+  // that does nothing. Press again, as a person would, until the preview has moved down.
+  const preview = page.getByTestId("drag-overlay");
+  await expect(preview).toBeVisible();
+  const startY = (await preview.boundingBox())?.y ?? 0;
+  await expect(async () => {
+    if (((await preview.boundingBox())?.y ?? 0) > startY + 1) return;
+    await page.keyboard.press("ArrowDown");
+    throw new Error("The drag preview has not moved down yet.");
+  }).toPass({ intervals: [250, 500, 1000] });
+  const saved = cardSaved(page);
   await page.keyboard.press("Space");
+  expect((await saved).ok()).toBeTruthy();
 
   const expected = [`${TEST_PREFIX}second`, `${TEST_PREFIX}first`];
   await expect.poll(async () => (await cardTitles(column)).filter((t) => t.startsWith(TEST_PREFIX))).toEqual(expected);
   await page.reload();
   const reloaded = getColumnByTitle(page, "Discovery");
   await expect.poll(async () => (await cardTitles(reloaded)).filter((t) => t.startsWith(TEST_PREFIX))).toEqual(expected);
+});
+
+test("a keyboard drag preview stays inside its column", async ({ page }) => {
+  // Keyboard drags find their target from the preview's rect. A fixed-width preview wider
+  // than the column reached into the next one, and cards moved there instead of down.
+  await login(page);
+  const column = page.locator('[data-testid^="column-"]').nth(1);
+  const nextColumn = page.locator('[data-testid^="column-"]').nth(2);
+  const card = column.locator("article").first();
+  await card.focus();
+  await page.keyboard.press("Space");
+  const preview = await page.getByTestId("drag-overlay").boundingBox();
+  const cardBox = await card.boundingBox();
+  const nextBox = await nextColumn.boundingBox();
+  await page.keyboard.press("Escape");
+  if (!preview || !cardBox || !nextBox) throw new Error("Unable to measure the drag preview.");
+  expect(Math.round(preview.width)).toBe(Math.round(cardBox.width));
+  expect(preview.x + preview.width).toBeLessThan(nextBox.x);
 });

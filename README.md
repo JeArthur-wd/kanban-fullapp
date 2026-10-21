@@ -31,6 +31,10 @@ The backend will be available at http://localhost:8000
 - Backend: `cd backend && pytest`. Live tests need a running server: `PM_BASE_URL=http://localhost:8000 pytest tests/test_integration.py`.
 - Frontend: `cd frontend && npm run test:unit`, and `npm run test:e2e` against a server on port 8000 (Playwright starts the Docker app if nothing is running there).
 
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`: backend tests, frontend lint/typecheck/unit tests/build, then the Docker image is built and the live backend tests and Playwright run against it. On pushes to `main` it can also deploy to Fly: set the repository secret `FLY_API_TOKEN` (`fly tokens create deploy`) and the repository variable `FLY_DEPLOY=true`. Deploys stay off until then.
+
 ## Deploy (Fly.io)
 
 Live at https://kanban-studio.fly.dev. Config is in `fly.toml`; the SQLite file lives on a 1 GB volume mounted at `/data`.

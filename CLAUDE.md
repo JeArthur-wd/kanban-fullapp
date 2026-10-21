@@ -51,6 +51,9 @@ PM_BASE_URL=http://127.0.0.1:8000 pytest tests/test_integration.py   # Live test
 ```
 `test_integration.py` skips unless `PM_BASE_URL` is set; the live OpenRouter test also needs `OPENROUTER_API_KEY`. Run them from `backend/` (the repo root on `PYTHONPATH` is not enough: tests import `app`).
 
+### CI
+`.github/workflows/ci.yml`: backend, frontend, and e2e against the built Docker image on every PR and push to `main`; deploy to Fly on `main` only when the `FLY_DEPLOY` repository variable is `true` (needs the `FLY_API_TOKEN` secret). Playwright drag tests wait for the card PATCH before reloading, since a reload cancels an in-flight save.
+
 ## Architecture
 
 **Backend (`backend/app/`):**
