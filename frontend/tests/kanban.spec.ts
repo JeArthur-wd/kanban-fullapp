@@ -229,3 +229,21 @@ test("moves a card with the keyboard", async ({ page }) => {
   const reloaded = getColumnByTitle(page, "Discovery");
   await expect.poll(async () => (await cardTitles(reloaded)).filter((t) => t.startsWith(TEST_PREFIX))).toEqual(expected);
 });
+
+test("a keyboard drag preview stays inside its column", async ({ page }) => {
+  // Keyboard drags find their target from the preview's rect. A fixed-width preview wider
+  // than the column reached into the next one, and cards moved there instead of down.
+  await login(page);
+  const column = page.locator('[data-testid^="column-"]').nth(1);
+  const nextColumn = page.locator('[data-testid^="column-"]').nth(2);
+  const card = column.locator("article").first();
+  await card.focus();
+  await page.keyboard.press("Space");
+  const preview = await page.getByTestId("drag-overlay").boundingBox();
+  const cardBox = await card.boundingBox();
+  const nextBox = await nextColumn.boundingBox();
+  await page.keyboard.press("Escape");
+  if (!preview || !cardBox || !nextBox) throw new Error("Unable to measure the drag preview.");
+  expect(Math.round(preview.width)).toBe(Math.round(cardBox.width));
+  expect(preview.x + preview.width).toBeLessThan(nextBox.x);
+});

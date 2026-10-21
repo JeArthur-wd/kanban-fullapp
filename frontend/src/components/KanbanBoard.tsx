@@ -42,6 +42,10 @@ export const KanbanBoard = ({
 }: KanbanBoardProps) => {
   const setBoard = onBoardChange;
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  // The overlay takes the dragged card's width. Keyboard drags have no pointer, so collisions
+  // come from the overlay's rect; a wider overlay reached into the next column and moved
+  // cards there instead of one slot down.
+  const [activeWidth, setActiveWidth] = useState<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -81,6 +85,7 @@ export const KanbanBoard = ({
       return;
     }
     setActiveCardId(activeId);
+    setActiveWidth(event.active.rect.current.initial?.width ?? null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -212,7 +217,7 @@ export const KanbanBoard = ({
         </section>
         <DragOverlay>
           {activeCard ? (
-            <div className="w-[272px]">
+            <div data-testid="drag-overlay" style={{ width: activeWidth ?? undefined }}>
               <KanbanCardPreview card={activeCard} />
             </div>
           ) : null}
