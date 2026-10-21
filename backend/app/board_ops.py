@@ -1,16 +1,125 @@
-"""Board mutations shared by the REST routes and the AI actions.
+"""Board, column and card operations shared by the REST routes and the AI actions.
 
-Every function takes the board id and checks that the column or card belongs to it.
+Board-level functions take the user id and check the user may use the board; the
+`board_for_*` helpers resolve a column or card to a board the user may use. Column and card
+functions take that board id and check the column or card belongs to it.
 None of them commit; the caller does.
 """
 
 import sqlite3
 
+from app.config import BASIC_COLUMNS, INITIAL_COLUMNS
 from app.database import ordered_ids, resequence_positions
+
+CARD_FIELDS = ("title", "details", "priority", "due_date")
 
 
 class NotFoundError(Exception):
-    """The column or card does not exist on this board."""
+    """The board, column or card does not exist, or the user may not use it."""
+
+
+def require_board(conn: sqlite3.Connection, user_id: int, board_id: int) -> None:
+    row = conn.execute(
+        "SELECT id FROM boards WHERE id = ? AND user_id = ?", (board_id, user_id)
+    ).fetchone()
+    if row is None:
+        raise NotFoundError("Board not found")
+
+
+def board_for_column(conn: sqlite3.Connection, user_id: int, column_id: int) -> int:
+    row = conn.execute(
+        """
+        SELECT boards.id FROM columns JOIN boards ON columns.board_id = boards.id
+        WHERE columns.id = ? AND boards.user_id = ?
+        """,
+        (column_id, user_id),
+    ).fetchone()
+    if row is None:
+        raise NotFoundError("Column not found")
+    return int(row["id"])
+
+
+def board_for_card(conn: sqlite3.Connection, user_id: int, card_id: int) -> int:
+    row = conn.execute(
+        """
+        SELECT boards.id FROM cards
+        JOIN columns ON cards.column_id = columns.id
+        JOIN boards ON columns.board_id = boards.id
+        WHERE cards.id = ? AND boards.user_id = ?
+        """,
+        (card_id, user_id),
+    ).fetchone()
+    if row is None:
+        raise NotFoundError("Card not found")
+    return int(row["id"])
+
+
+def list_boards(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT boards.id, boards.title, boards.description, boards.created_at,
+            (SELECT COUNT(*) FROM columns WHERE columns.board_id = boards.id) AS column_count,
+            (SELECT COUNT(*) FROM cards JOIN columns ON cards.column_id = columns.id
+             WHERE columns.board_id = boards.id AND cards.archived = 0) AS card_count
+        FROM boards WHERE boards.user_id = ? ORDER BY boards.id
+        """,
+        (user_id,),
+    ).fetchall()
+    return [
+        {
+            "id": str(row["id"]),
+            "title": row["title"],
+            "description": row["description"],
+            "createdAt": row["created_at"],
+            "columnCount": row["column_count"],
+            "cardCount": row["card_count"],
+        }
+        for row in rows
+    ]
+
+
+def create_board(
+    conn: sqlite3.Connection, user_id: int, title: str, description: str, template: str
+) -> int:
+    """Create a board. `template` is "sample" (demo columns and cards) or "basic"."""
+    cursor = conn.execute(
+        "INSERT INTO boards (user_id, title, description) VALUES (?, ?, ?)",
+        (user_id, title, description),
+    )
+    board_id = int(cursor.lastrowid)
+    columns = INITIAL_COLUMNS if template == "sample" else [(name, []) for name in BASIC_COLUMNS]
+    for column_index, (column_title, cards) in enumerate(columns):
+        column_cursor = conn.execute(
+            "INSERT INTO columns (board_id, title, position) VALUES (?, ?, ?)",
+            (board_id, column_title, column_index),
+        )
+        for card_index, (card_title, details) in enumerate(cards):
+            conn.execute(
+                "INSERT INTO cards (column_id, title, details, position) VALUES (?, ?, ?, ?)",
+                (column_cursor.lastrowid, card_title, details, card_index),
+            )
+    return board_id
+
+
+def update_board(
+    conn: sqlite3.Connection,
+    user_id: int,
+    board_id: int,
+    title: str | None,
+    description: str | None,
+) -> None:
+    require_board(conn, user_id, board_id)
+    for column, value in (("title", title), ("description", description)):
+        if value is not None:
+            conn.execute(
+                f"UPDATE boards SET {column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (value, board_id),
+            )
+
+
+def delete_board(conn: sqlite3.Connection, user_id: int, board_id: int) -> None:
+    require_board(conn, user_id, board_id)
+    conn.execute("DELETE FROM boards WHERE id = ?", (board_id,))
 
 
 def _clamp(position: int | None, length: int) -> int:
@@ -117,13 +226,18 @@ def create_card(
     title: str,
     details: str,
     position: int | None,
+    priority: str = "none",
+    due_date: str | None = None,
 ) -> int:
     _require_column(conn, board_id, column_id)
     ids = _card_ids(conn, column_id)
     insert_at = _clamp(position, len(ids))
     cursor = conn.execute(
-        "INSERT INTO cards (column_id, title, details, position) VALUES (?, ?, ?, ?)",
-        (column_id, title, details, insert_at),
+        """
+        INSERT INTO cards (column_id, title, details, priority, due_date, position)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (column_id, title, details, priority, due_date, insert_at),
     )
     card_id = int(cursor.lastrowid)
     ids.insert(insert_at, card_id)
@@ -132,23 +246,20 @@ def create_card(
 
 
 def update_card_fields(
-    conn: sqlite3.Connection,
-    board_id: int,
-    card_id: int,
-    title: str | None,
-    details: str | None,
+    conn: sqlite3.Connection, board_id: int, card_id: int, fields: dict[str, object]
 ) -> None:
+    """Set the given card fields (keys from CARD_FIELDS). A None due_date clears it."""
     _require_card(conn, board_id, card_id)
-    if title is not None:
-        conn.execute(
-            "UPDATE cards SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, card_id),
-        )
-    if details is not None:
-        conn.execute(
-            "UPDATE cards SET details = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (details, card_id),
-        )
+    unknown = set(fields) - set(CARD_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown card fields: {sorted(unknown)}")
+    if not fields:
+        return
+    assignments = ", ".join(f"{name} = ?" for name in fields)
+    conn.execute(
+        f"UPDATE cards SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (*fields.values(), card_id),
+    )
 
 
 def move_card(

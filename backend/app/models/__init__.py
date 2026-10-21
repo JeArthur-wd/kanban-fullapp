@@ -1,6 +1,21 @@
 """Pydantic models. Import from here: `from app.models import CardCreate`."""
 
-from app.models.board import CardCreate, CardUpdate, ColumnCreate, ColumnUpdate
+from app.models.account import (
+    AccountDelete,
+    LoginRequest,
+    PasswordChange,
+    ProfileUpdate,
+    RegisterRequest,
+)
+from app.models.board import (
+    BoardCreate,
+    BoardUpdate,
+    CardCreate,
+    CardUpdate,
+    ColumnCreate,
+    ColumnUpdate,
+    Priority,
+)
 from app.models.chat import (
     ChatAction,
     ChatHistoryItem,
@@ -15,6 +30,9 @@ from app.models.chat import (
 )
 
 __all__ = [
+    "AccountDelete",
+    "BoardCreate",
+    "BoardUpdate",
     "CardCreate",
     "CardUpdate",
     "ChatAction",
@@ -25,7 +43,12 @@ __all__ = [
     "ColumnUpdate",
     "CreateCardAction",
     "DeleteCardAction",
+    "LoginRequest",
     "MoveCardAction",
+    "PasswordChange",
+    "Priority",
+    "ProfileUpdate",
+    "RegisterRequest",
     "SkippedAction",
     "StructuredChatOutput",
     "UpdateCardAction",

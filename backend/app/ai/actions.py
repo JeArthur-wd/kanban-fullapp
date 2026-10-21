@@ -6,7 +6,6 @@ from pydantic import ValidationError
 
 from app import board_ops
 from app.board_ops import NotFoundError
-from app.database import get_or_create_board
 from app.models import (
     CardCreate,
     CardUpdate,
@@ -42,7 +41,7 @@ def _apply_one(conn: sqlite3.Connection, board_id: int, action: ChatAction) -> N
     elif isinstance(action, UpdateCardAction):
         card_id = _to_int(action.cardId, "Card")
         fields = CardUpdate(title=action.title, details=action.details)
-        board_ops.update_card_fields(conn, board_id, card_id, fields.title, fields.details)
+        board_ops.update_card_fields(conn, board_id, card_id, fields.field_changes())
     elif isinstance(action, MoveCardAction):
         card_id = _to_int(action.cardId, "Card")
         column_id = _to_int(action.columnId, "Column")
@@ -52,10 +51,9 @@ def _apply_one(conn: sqlite3.Connection, board_id: int, action: ChatAction) -> N
 
 
 def apply_actions(
-    conn: sqlite3.Connection, user_id: int, actions: list[ChatAction]
+    conn: sqlite3.Connection, board_id: int, actions: list[ChatAction]
 ) -> tuple[list[ChatAction], list[SkippedAction]]:
     """Apply what can be applied. Returns (applied, skipped) so the reply can say which."""
-    board_id = get_or_create_board(conn, user_id)
     applied: list[ChatAction] = []
     skipped: list[SkippedAction] = []
 

@@ -1,7 +1,7 @@
 {
-    "schemaVersion": "1.0",
+    "schemaVersion": "2.0",
     "db": "sqlite",
-    "notes": "Initial schema for single-board-per-user MVP.",
+    "notes": "Many boards per user. Migrations run on PRAGMA user_version (see backend/app/database.py). Foreign keys are on; deleting a user removes its boards, columns and cards.",
     "tables": [
         {
             "name": "users",
@@ -9,7 +9,8 @@
                 {
                     "name": "id",
                     "type": "INTEGER",
-                    "primaryKey": true
+                    "primaryKey": true,
+                    "autoincrement": true
                 },
                 {
                     "name": "username",
@@ -17,9 +18,23 @@
                     "nullable": false
                 },
                 {
+                    "name": "display_name",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": "''"
+                },
+                {
                     "name": "password_hash",
                     "type": "TEXT",
-                    "nullable": true
+                    "nullable": true,
+                    "notes": "scrypt$N$r$p$salt$hash"
+                },
+                {
+                    "name": "session_epoch",
+                    "type": "INTEGER",
+                    "nullable": false,
+                    "default": "0",
+                    "notes": "Bumped on password change; sessions carry it."
                 },
                 {
                     "name": "created_at",
@@ -57,8 +72,13 @@
                 {
                     "name": "title",
                     "type": "TEXT",
+                    "nullable": false
+                },
+                {
+                    "name": "description",
+                    "type": "TEXT",
                     "nullable": false,
-                    "default": "My Board"
+                    "default": "''"
                 },
                 {
                     "name": "created_at",
@@ -77,14 +97,13 @@
                     "columns": [
                         "user_id"
                     ],
-                    "references": "users(id)"
-                },
-                {
-                    "type": "unique",
-                    "columns": [
-                        "user_id"
-                    ],
-                    "notes": "Enforces one board per user for MVP."
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "onDelete": "cascade"
                 }
             ],
             "indexes": [
@@ -136,7 +155,13 @@
                     "columns": [
                         "board_id"
                     ],
-                    "references": "boards(id)"
+                    "references": {
+                        "table": "boards",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "onDelete": "cascade"
                 }
             ],
             "indexes": [
@@ -144,13 +169,6 @@
                     "name": "idx_columns_board_id",
                     "columns": [
                         "board_id"
-                    ]
-                },
-                {
-                    "name": "idx_columns_board_position",
-                    "columns": [
-                        "board_id",
-                        "position"
                     ]
                 }
             ]
@@ -177,7 +195,25 @@
                     "name": "details",
                     "type": "TEXT",
                     "nullable": false,
-                    "default": ""
+                    "default": "''"
+                },
+                {
+                    "name": "priority",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": "'none'",
+                    "check": [
+                        "none",
+                        "low",
+                        "medium",
+                        "high"
+                    ]
+                },
+                {
+                    "name": "due_date",
+                    "type": "TEXT",
+                    "nullable": true,
+                    "notes": "ISO date, YYYY-MM-DD"
                 },
                 {
                     "name": "position",
@@ -188,7 +224,7 @@
                     "name": "archived",
                     "type": "INTEGER",
                     "nullable": false,
-                    "default": 0
+                    "default": "0"
                 },
                 {
                     "name": "created_at",
@@ -207,7 +243,13 @@
                     "columns": [
                         "column_id"
                     ],
-                    "references": "columns(id)"
+                    "references": {
+                        "table": "columns",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "onDelete": "cascade"
                 }
             ],
             "indexes": [
@@ -215,13 +257,6 @@
                     "name": "idx_cards_column_id",
                     "columns": [
                         "column_id"
-                    ]
-                },
-                {
-                    "name": "idx_cards_column_position",
-                    "columns": [
-                        "column_id",
-                        "position"
                     ]
                 }
             ]

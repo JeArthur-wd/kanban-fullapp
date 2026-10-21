@@ -114,7 +114,16 @@ def test_create_app_builds_independent_apps_with_all_routes() -> None:
     first, second = create_app(), create_app()
     assert first is not second
     paths = set(first.openapi()["paths"])
-    for expected in ["/health", "/api/hello", "/api/login", "/api/board", "/api/chat"]:
+    for expected in [
+        "/health",
+        "/api/hello",
+        "/api/login",
+        "/api/register",
+        "/api/me",
+        "/api/boards",
+        "/api/boards/{board_id}",
+        "/api/boards/{board_id}/chat",
+    ]:
         assert expected in paths
     assert TestClient(second).get("/health").json() == {"status": "ok"}
 
@@ -192,3 +201,23 @@ def test_static_fallback_null_byte_does_not_error(tmp_path, monkeypatch) -> None
     monkeypatch.setattr(static_module, "STATIC_DIR", _site(tmp_path))
     response = static_module.static_fallback("bad\x00name")
     assert response.status_code in (200, 404)
+
+
+def test_unknown_api_paths_are_json_404(tmp_path, monkeypatch) -> None:
+    # Review L1: these used to return the frontend's index.html with status 200.
+    (tmp_path / "index.html").write_text("<html>app</html>")
+    monkeypatch.setattr(static_module, "STATIC_DIR", tmp_path)
+    for path in ["/api", "/api/does-not-exist", "/api/boards/1/nothing-here"]:
+        response = client.get(path)
+        assert response.status_code == 404, path
+        assert response.json() == {"detail": "Not Found"}
+    # Frontend routes outside /api still get the app.
+    assert client.get("/apiary").text == "<html>app</html>"
+
+
+def test_startup_migrates_and_creates_the_demo_account(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PM_DB_PATH", str(tmp_path / "startup.db"))
+    with TestClient(create_app()) as started:
+        response = started.post("/api/login", json={"username": "user", "password": "password"})
+        assert response.status_code == 200
+        assert len(started.get("/api/boards").json()) == 1

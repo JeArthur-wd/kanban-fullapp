@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.database import init_db
+from app.accounts import ensure_demo_account
+from app.database import connect_db, init_db
 from app.routes import api_router, static_router
 from app.routes.static import get_static_dir, mount_static_assets
 
@@ -10,6 +11,11 @@ from app.routes.static import get_static_dir, mount_static_assets
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    conn = connect_db()
+    try:
+        ensure_demo_account(conn)
+    finally:
+        conn.close()
     yield
 
 

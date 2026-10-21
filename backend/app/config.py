@@ -12,9 +12,12 @@ OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/ap
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b")
 OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0"))
 
-# Sign-in. The MVP has one account; override with PM_LOGIN_USER / PM_LOGIN_PASSWORD.
+# Accounts. A demo account is created at startup; override it with PM_LOGIN_USER and
+# PM_LOGIN_PASSWORD. Its password is only set while it has none (see ensure_demo_account).
 DEFAULT_LOGIN_USER = "user"
 DEFAULT_LOGIN_PASSWORD = "password"
+USERNAME_PATTERN = r"^[a-z0-9][a-z0-9_.-]{2,31}$"
+PASSWORD_MIN_CHARS = 8
 SESSION_TTL_SECONDS = 7 * 24 * 3600
 # Without PM_SESSION_SECRET a random key is made per process, so sessions end on restart.
 _FALLBACK_SESSION_SECRET = secrets.token_hex(32)
@@ -23,12 +26,13 @@ _FALLBACK_SESSION_SECRET = secrets.token_hex(32)
 CHAT_MESSAGE_MAX_CHARS = 4000
 CHAT_HISTORY_MAX_ITEMS = 20
 CHAT_RATE_LIMIT = 20  # requests per minute
-LOGIN_RATE_LIMIT = 10  # attempts per minute
+LOGIN_RATE_LIMIT = 10  # attempts per minute, shared by sign-in and sign-up
 
-# Database configuration
+# Boards. A new account gets one board with the sample content below; boards made later use
+# the sample or the basic column set.
 DEFAULT_BOARD_TITLE = "My Board"
+BASIC_COLUMNS = ["To do", "In progress", "Done"]
 
-# Initial seed data for new boards
 INITIAL_COLUMNS = [
     ("Backlog", [
         ("Align roadmap themes", "Draft quarterly themes with impact statements and metrics."),
@@ -80,6 +84,21 @@ def get_login_credentials() -> tuple[str, str]:
         os.getenv("PM_LOGIN_USER") or DEFAULT_LOGIN_USER,
         os.getenv("PM_LOGIN_PASSWORD") or DEFAULT_LOGIN_PASSWORD,
     )
+
+
+def signup_enabled() -> bool:
+    return os.getenv("PM_ALLOW_SIGNUP", "true").strip().lower() not in ("0", "false", "no")
+
+
+def get_login_rate_limit() -> int:
+    # The e2e suite signs in many times a minute against one server, so it raises this.
+    return int(os.getenv("PM_LOGIN_RATE_LIMIT") or LOGIN_RATE_LIMIT)
+
+
+def behind_fly_proxy() -> bool:
+    # Fly sets FLY_APP_NAME on its machines. Only there is Fly-Client-IP set by the proxy and
+    # not by the client.
+    return bool(os.getenv("FLY_APP_NAME"))
 
 
 def get_session_secret() -> bytes:

@@ -4,7 +4,8 @@ import pytest
 from pydantic import TypeAdapter
 
 from app.ai import apply_actions, build_structured_messages, parse_structured_output
-from app.database import connect_db, fetch_board, get_or_create_user
+from app.accounts import create_user
+from app.database import connect_db, fetch_board
 from app.models import (
     ChatAction,
     ChatHistoryItem,
@@ -20,6 +21,16 @@ def conn(db_path):
     connection = connect_db()
     yield connection
     connection.close()
+
+
+def _first_board_id(conn, username: str = "user") -> int:
+    return int(
+        conn.execute(
+            "SELECT boards.id FROM boards JOIN users ON boards.user_id = users.id "
+            "WHERE users.username = ? ORDER BY boards.id",
+            (username,),
+        ).fetchone()["id"]
+    )
 
 
 def _titles(board: dict, column_id: str) -> list[str]:
@@ -57,8 +68,8 @@ def test_numeric_ids_from_the_model_are_accepted() -> None:
 
 
 def test_apply_actions_updates_board(conn) -> None:
-    user_id = get_or_create_user(conn, "user")
-    board = fetch_board(conn, user_id)
+    board_id = _first_board_id(conn)
+    board = fetch_board(conn, board_id)
 
     first_column = board["columns"][0]
     second_column = board["columns"][1]
@@ -85,24 +96,24 @@ def test_apply_actions_updates_board(conn) -> None:
         ),
     ]
 
-    applied, skipped = apply_actions(conn, user_id, actions)
+    applied, skipped = apply_actions(conn, board_id, actions)
     assert len(applied) == 3
     assert skipped == []
-    updated = fetch_board(conn, user_id)
+    updated = fetch_board(conn, board_id)
     assert updated["cards"][first_card_id]["title"] == "Updated title"
     assert updated["columns"][1]["cardIds"][0] == first_card_id
     assert _titles(updated, first_column["id"])[0] == "AI card"
 
     applied, skipped = apply_actions(
-        conn, user_id, [DeleteCardAction(type="delete_card", cardId=first_card_id)]
+        conn, board_id, [DeleteCardAction(type="delete_card", cardId=first_card_id)]
     )
     assert len(applied) == 1
-    assert first_card_id not in fetch_board(conn, user_id)["cards"]
+    assert first_card_id not in fetch_board(conn, board_id)["cards"]
 
 
 def test_move_card_action_down_within_column(conn) -> None:
-    user_id = get_or_create_user(conn, "user")
-    board = fetch_board(conn, user_id)
+    board_id = _first_board_id(conn)
+    board = fetch_board(conn, board_id)
     column = board["columns"][2]
     first = column["cardIds"][0]
     before = _titles(board, column["id"])
@@ -110,16 +121,16 @@ def test_move_card_action_down_within_column(conn) -> None:
 
     apply_actions(
         conn,
-        user_id,
+        board_id,
         [MoveCardAction(type="move_card", cardId=first, columnId=column["id"], position=1)],
     )
 
-    assert _titles(fetch_board(conn, user_id), column["id"]) == [before[1], before[0]]
+    assert _titles(fetch_board(conn, board_id), column["id"]) == [before[1], before[0]]
 
 
 def test_invalid_actions_are_skipped_and_reported(conn) -> None:
-    user_id = get_or_create_user(conn, "user")
-    board = fetch_board(conn, user_id)
+    board_id = _first_board_id(conn)
+    board = fetch_board(conn, board_id)
     column_id = board["columns"][0]["id"]
     card_id = board["columns"][0]["cardIds"][0]
 
@@ -133,7 +144,7 @@ def test_invalid_actions_are_skipped_and_reported(conn) -> None:
         DeleteCardAction(type="delete_card", cardId="99999"),
         UpdateCardAction(type="update_card", cardId=card_id, title="Kept"),
     ]
-    applied, skipped = apply_actions(conn, user_id, actions)
+    applied, skipped = apply_actions(conn, board_id, actions)
 
     assert len(applied) == 1
     assert len(skipped) == 7
@@ -143,14 +154,16 @@ def test_invalid_actions_are_skipped_and_reported(conn) -> None:
         "move_card",
         "delete_card",
     }
-    updated = fetch_board(conn, user_id)
+    updated = fetch_board(conn, board_id)
     assert updated["cards"][card_id]["title"] == "Kept"
     assert len(updated["cards"]) == len(board["cards"])
 
 
 def test_actions_cannot_touch_another_users_board(conn) -> None:
-    owner = get_or_create_user(conn, "owner")
-    other = get_or_create_user(conn, "other")
+    create_user(conn, "owner", "owner-pass")
+    create_user(conn, "other", "other-pass")
+    owner = _first_board_id(conn, "owner")
+    other = _first_board_id(conn, "other")
     owner_board = fetch_board(conn, owner)
     other_board = fetch_board(conn, other)
     foreign_card = owner_board["columns"][0]["cardIds"][0]

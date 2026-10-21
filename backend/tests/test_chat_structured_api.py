@@ -31,8 +31,8 @@ def _model_says(monkeypatch, content: str) -> None:
     monkeypatch.setattr(ai_module.httpx, "post", lambda *_a, **_k: _DummyResponse(content))
 
 
-def test_chat_applies_actions(monkeypatch, client) -> None:
-    board = client.get("/api/board").json()
+def test_chat_applies_actions(monkeypatch, client, board_url) -> None:
+    board = client.get(board_url).json()
     column_id = board["columns"][0]["id"]
 
     _model_says(
@@ -53,7 +53,7 @@ def test_chat_applies_actions(monkeypatch, client) -> None:
         ),
     )
 
-    response = client.post("/api/chat", json={"message": "Add a card."})
+    response = client.post(f"{board_url}/chat", json={"message": "Add a card."})
     assert response.status_code == 200
 
     payload = response.json()
@@ -63,14 +63,14 @@ def test_chat_applies_actions(monkeypatch, client) -> None:
     assert any(card["title"] == "AI created" for card in payload["board"]["cards"].values())
 
 
-def test_chat_reports_actions_that_were_not_applied(monkeypatch, client) -> None:
+def test_chat_reports_actions_that_were_not_applied(monkeypatch, client, board_url) -> None:
     _model_says(
         monkeypatch,
         json.dumps({"reply": "Deleted the card.", "actions": [{"type": "delete_card", "cardId": "99999"}]}),
     )
-    before = client.get("/api/board").json()
+    before = client.get(board_url).json()
 
-    response = client.post("/api/chat", json={"message": "delete it"})
+    response = client.post(f"{board_url}/chat", json={"message": "delete it"})
     payload = response.json()
 
     assert response.status_code == 200
@@ -81,7 +81,7 @@ def test_chat_reports_actions_that_were_not_applied(monkeypatch, client) -> None
     assert payload["board"] == before
 
 
-def test_chat_non_numeric_id_is_skipped_not_a_server_error(monkeypatch, client) -> None:
+def test_chat_non_numeric_id_is_skipped_not_a_server_error(monkeypatch, client, board_url) -> None:
     _model_says(
         monkeypatch,
         json.dumps(
@@ -91,38 +91,38 @@ def test_chat_non_numeric_id_is_skipped_not_a_server_error(monkeypatch, client) 
             }
         ),
     )
-    response = client.post("/api/chat", json={"message": "add"})
+    response = client.post(f"{board_url}/chat", json={"message": "add"})
     assert response.status_code == 200
     assert len(response.json()["skipped"]) == 1
 
 
-def test_chat_without_apply_updates_returns_proposed_actions(monkeypatch, client) -> None:
+def test_chat_without_apply_updates_returns_proposed_actions(monkeypatch, client, board_url) -> None:
     _model_says(
         monkeypatch,
         json.dumps({"reply": "Would delete.", "actions": [{"type": "delete_card", "cardId": "1"}]}),
     )
-    before = client.get("/api/board").json()
-    response = client.post("/api/chat", json={"message": "x", "apply_updates": False})
+    before = client.get(board_url).json()
+    response = client.post(f"{board_url}/chat", json={"message": "x", "apply_updates": False})
     assert response.status_code == 200
     assert len(response.json()["actions"]) == 1
-    assert client.get("/api/board").json() == before
+    assert client.get(board_url).json() == before
 
 
-def test_chat_accepts_json_wrapped_in_text(monkeypatch, client) -> None:
+def test_chat_accepts_json_wrapped_in_text(monkeypatch, client, board_url) -> None:
     _model_says(monkeypatch, 'Sure! {"reply": "Done.", "actions": []} Hope that helps.')
-    response = client.post("/api/chat", json={"message": "Do something."})
+    response = client.post(f"{board_url}/chat", json={"message": "Do something."})
     assert response.status_code == 200
     assert response.json()["response"] == "Done."
 
 
-def test_chat_rejects_non_json(monkeypatch, client) -> None:
+def test_chat_rejects_non_json(monkeypatch, client, board_url) -> None:
     _model_says(monkeypatch, "no json here")
-    assert client.post("/api/chat", json={"message": "Do something."}).status_code == 502
+    assert client.post(f"{board_url}/chat", json={"message": "Do something."}).status_code == 502
 
 
-def test_chat_rejects_schema_invalid_output(monkeypatch, client) -> None:
+def test_chat_rejects_schema_invalid_output(monkeypatch, client, board_url) -> None:
     _model_says(monkeypatch, json.dumps({"reply": "Hi", "actions": [{"type": "explode_board"}]}))
-    assert client.post("/api/chat", json={"message": "Do something."}).status_code == 502
+    assert client.post(f"{board_url}/chat", json={"message": "Do something."}).status_code == 502
 
 
 @pytest.mark.parametrize(
@@ -136,7 +136,7 @@ def test_chat_rejects_schema_invalid_output(monkeypatch, client) -> None:
 )
 def test_chat_maps_upstream_errors(
     monkeypatch, client, upstream_status, expected_status, expected_text
-) -> None:
+, board_url) -> None:
     monkeypatch.setattr(
         ai_module.httpx,
         "post",
@@ -144,29 +144,55 @@ def test_chat_maps_upstream_errors(
             upstream_status, json={"error": {"message": "x"}}, request=httpx.Request("POST", "http://x")
         ),
     )
-    response = client.post("/api/chat", json={"message": "hi"})
+    response = client.post(f"{board_url}/chat", json={"message": "hi"})
     assert response.status_code == expected_status
     assert expected_text in response.json()["detail"]
 
 
-def test_chat_handles_non_json_upstream_body(monkeypatch, client) -> None:
+def test_chat_handles_non_json_upstream_body(monkeypatch, client, board_url) -> None:
     monkeypatch.setattr(ai_module.httpx, "post", lambda *_a, **_k: _BadBodyResponse())
-    response = client.post("/api/chat", json={"message": "hi"})
+    response = client.post(f"{board_url}/chat", json={"message": "hi"})
     assert response.status_code == 502
     assert response.json()["detail"] == "OpenRouter returned an invalid response"
 
 
-def test_chat_timeout_is_a_gateway_timeout(monkeypatch, client) -> None:
+def test_chat_timeout_is_a_gateway_timeout(monkeypatch, client, board_url) -> None:
     def _raise(*_a, **_k):
         raise httpx.ReadTimeout("slow")
 
     monkeypatch.setattr(ai_module.httpx, "post", _raise)
-    assert client.post("/api/chat", json={"message": "hi"}).status_code == 504
+    assert client.post(f"{board_url}/chat", json={"message": "hi"}).status_code == 504
 
 
-def test_chat_network_error_is_bad_gateway(monkeypatch, client) -> None:
+def test_chat_network_error_is_bad_gateway(monkeypatch, client, board_url) -> None:
     def _raise(*_a, **_k):
         raise httpx.ConnectError("down")
 
     monkeypatch.setattr(ai_module.httpx, "post", _raise)
-    assert client.post("/api/chat", json={"message": "hi"}).status_code == 502
+    assert client.post(f"{board_url}/chat", json={"message": "hi"}).status_code == 502
+
+
+def test_chat_on_another_users_board_is_404(monkeypatch, client, board_url, make_user) -> None:
+    _model_says(monkeypatch, json.dumps({"reply": "ok", "actions": []}))
+    other = make_user("snoop")
+    assert other.post(f"{board_url}/chat", json={"message": "hi"}).status_code == 404
+
+
+def test_chat_changes_only_its_own_board(monkeypatch, client, board_url) -> None:
+    second_id = client.post("/api/boards", json={"title": "Second"}).json()["id"]
+    column_id = client.get(f"/api/boards/{second_id}").json()["columns"][0]["id"]
+    before = client.get(board_url).json()
+    _model_says(
+        monkeypatch,
+        json.dumps(
+            {"reply": "ok", "actions": [{"type": "create_card", "columnId": column_id, "title": "x"}]}
+        ),
+    )
+    # The column belongs to the second board, so asking the first board's chat skips it.
+    response = client.post(f"{board_url}/chat", json={"message": "add"})
+    assert response.json()["skipped"] == [{"type": "create_card", "reason": "Column not found"}]
+    assert client.get(board_url).json() == before
+
+    response = client.post(f"/api/boards/{second_id}/chat", json={"message": "add"})
+    assert response.json()["skipped"] == []
+    assert len(response.json()["board"]["cards"]) == 1
